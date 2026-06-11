@@ -6,9 +6,11 @@ import type {
   MasteryResponse,
   QuizAttemptRequest,
   QuizAttemptResponse,
+  QuizListResponse,
   QuizResponse,
   ReviewResponse,
-  SummaryResponse
+  SummaryResponse,
+  StudyPlan,
 } from "@/lib/types";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -64,12 +66,24 @@ export async function summarizeDocument(documentId: string): Promise<SummaryResp
   });
 }
 
+export async function listQuizzes(documentId: string): Promise<QuizListResponse> {
+  return request<QuizListResponse>(`/documents/${documentId}/quiz`);
+}
+
+export async function getQuizById(documentId: string, quizId: string): Promise<QuizResponse> {
+  return request<QuizResponse>(`/documents/${documentId}/quiz/${quizId}`);
+}
+
 export async function createQuiz(documentId: string, numQuestions = 6): Promise<QuizResponse> {
   return request<QuizResponse>(`/documents/${documentId}/quiz`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ num_questions: numQuestions })
   });
+}
+
+export async function generateStudyPlan(): Promise<StudyPlan> {
+  return request<StudyPlan>("/profile/study-plan", { method: "POST" });
 }
 
 export async function submitQuizAttempt(

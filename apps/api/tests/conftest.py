@@ -126,13 +126,13 @@ def mock_llm(monkeypatch):
             return _MC_TEXT_MOCKS[idx]
         if "出1道新的简答题" in user_msg or "出1道中文简答题" in user_msg:
             return _QUIZ_TEXT_MOCK
-        return "这是一个测试回答（第1页）。"
+        return "这是一个较长的测试回答，根据文档内容整理，涵盖主要知识点，供单元测试验证使用。"
 
     def _mock_stream_chat(messages, **_):
-        yield "这是一个流式测试回答（第1页）。"
+        yield "这是一个较长的流式测试回答，根据文档内容整理，涵盖主要知识点，供单元测试验证使用。"
 
     def _mock_stream_answer(question, chunks, **_):
-        yield "这是一个测试回答（第1页）。"
+        yield "这是一个较长的测试回答，根据文档内容整理，涵盖主要知识点，供单元测试验证使用。"
 
     monkeypatch.setattr(llm, "call_chat", _mock_call_chat)
     monkeypatch.setattr(llm, "stream_chat", _mock_stream_chat)

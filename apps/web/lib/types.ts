@@ -57,6 +57,18 @@ export type QuizResponse = {
   questions: QuizQuestion[];
 };
 
+export type QuizSummary = {
+  id: string;
+  title: string;
+  difficulty: string;
+  question_count: number;
+  created_at: string;
+};
+
+export type QuizListResponse = {
+  quizzes: QuizSummary[];
+};
+
 export type QuizAttemptRequest = {
   answers: Record<string, string>;
 };
@@ -111,5 +123,17 @@ export type ReviewItem = {
 export type ReviewResponse = {
   items: ReviewItem[];
   total: number;
+};
+
+export type StudyPlanItem = {
+  document_id: string;
+  document_title: string;
+  reason: string;
+  priority: number;
+};
+
+export type StudyPlan = {
+  items: StudyPlanItem[];
+  generated_at: string;
 };
 

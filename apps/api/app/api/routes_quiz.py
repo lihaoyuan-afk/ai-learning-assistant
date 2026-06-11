@@ -1,10 +1,14 @@
 from fastapi import APIRouter, HTTPException
 
 from app.agents.graph import quiz_graph
-from app.schemas.quiz import QuizAttemptRequest, QuizAttemptResponse, QuizRequest, QuizResponse
+from app.schemas.quiz import (
+    QuizAttemptRequest, QuizAttemptResponse, QuizListResponse,
+    QuizRequest, QuizResponse,
+)
 from app.services.document_store import (
     get_document,
     get_quiz,
+    list_quizzes,
     save_quiz,
     score_and_save_attempt,
 )
@@ -41,6 +45,13 @@ def create_quiz(document_id: str, request: QuizRequest) -> QuizResponse:
 
     save_quiz(document_id, quiz)
     return quiz
+
+
+@router.get("", response_model=QuizListResponse)
+def list_document_quizzes(document_id: str) -> QuizListResponse:
+    if get_document(document_id) is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return QuizListResponse(quizzes=list_quizzes(document_id))
 
 
 @router.get("/{quiz_id}", response_model=QuizResponse)

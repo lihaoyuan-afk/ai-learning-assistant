@@ -37,3 +37,14 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Debug / temp artifacts
+quiz_*.json
+quiz_*.txt
+e2e_result.json
+mc_raw_output.txt
+*.pdf
+logs/
+
+# Claude Code internals
+.claude/

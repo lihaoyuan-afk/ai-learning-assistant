@@ -1,7 +1,7 @@
 """
 LangGraph graphs for the three main agent flows.
 
-chat_graph:    retrieve → answer → END
+chat_graph:    retrieve → answer → reflect → [retry→retrieve | done→END]
 summary_graph: retrieve_all → summarize → END
 quiz_graph:    retrieve_all → generate_quiz → END
 
@@ -14,15 +14,21 @@ from langgraph.graph import END, StateGraph
 
 from app.agents.state import AgentState
 
+_MAX_RETRIES = 1
 
 # ── node functions ─────────────────────────────────────────────────────────────
 
 def _retrieve(state: AgentState) -> dict:
     try:
         from app.services.retrieval import retrieve_context
+        retry_count = state.get("retry_count", 0)
+        query = state.get("question", "")
+        # On retry, increase retrieval limit to cast a wider net
+        limit = 8 if retry_count > 0 else 5
         chunks = retrieve_context(
             document_id=state["document_id"],
-            query=state.get("question", ""),
+            query=query,
+            limit=limit,
         )
         return {"chunks": chunks}
     except Exception as exc:
@@ -46,10 +52,40 @@ def _answer(state: AgentState) -> dict:
         answer = answer_question(
             question=state.get("question", ""),
             chunks=state.get("chunks", []),
+            history=state.get("history"),
         )
         return {"result": answer}
     except Exception as exc:
         return {"result": f"LLM 调用失败：{exc}", "error": str(exc)}
+
+
+def _reflect(state: AgentState) -> dict:
+    """Assess answer quality; signal retry if answer looks like a fallback."""
+    result = state.get("result", "")
+    retry_count = state.get("retry_count", 0)
+
+    # Heuristic: if the answer is very short or contains common fallback phrases,
+    # it probably means retrieval didn't find relevant content.
+    fallback_signals = [
+        "没有找到", "无法回答", "文档中没有", "没有相关",
+        "找不到相关", "I don't know", "not found",
+    ]
+    is_fallback = len(result.strip()) < 30 or any(s in result for s in fallback_signals)
+
+    if is_fallback and retry_count < _MAX_RETRIES:
+        return {
+            "reflection": "answer_insufficient",
+            "retry_count": retry_count + 1,
+        }
+    return {
+        "reflection": "answer_ok",
+    }
+
+
+def _route_after_reflect(state: AgentState) -> str:
+    if state.get("reflection") == "answer_insufficient":
+        return "retrieve"
+    return END
 
 
 def _summarize(state: AgentState) -> dict:
@@ -94,9 +130,11 @@ def _build_chat_graph():
     g = StateGraph(AgentState)
     g.add_node("retrieve", _retrieve)
     g.add_node("answer", _answer)
+    g.add_node("reflect", _reflect)
     g.set_entry_point("retrieve")
     g.add_edge("retrieve", "answer")
-    g.add_edge("answer", END)
+    g.add_edge("answer", "reflect")
+    g.add_conditional_edges("reflect", _route_after_reflect, {"retrieve": "retrieve", END: END})
     return g.compile()
 
 

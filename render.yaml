@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: agentlearn-api
+    runtime: python
+    rootDir: apps/api
+    buildCommand: pip install -e .
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # ── Database (Neon free tier) ─────────────────────────────────────────
+      - key: DATABASE_URL
+        sync: false        # paste Neon connection string in Render dashboard
+      # ── Vector DB (Qdrant Cloud free tier) ───────────────────────────────
+      - key: QDRANT_URL
+        sync: false        # e.g. https://xxxxxxxx.qdrant.io:6333
+      - key: QDRANT_API_KEY
+        sync: false
+      # ── Chat LLM (DeepSeek) ───────────────────────────────────────────────
+      - key: OPENAI_API_KEY
+        sync: false        # DeepSeek API key from platform.deepseek.com
+      - key: OPENAI_BASE_URL
+        value: https://api.deepseek.com/v1
+      - key: OPENAI_CHAT_MODEL
+        value: deepseek-chat
+      # ── Embeddings (Jina AI free 1M tokens/month) ────────────────────────
+      - key: EMBEDDING_API_KEY
+        sync: false        # Jina API key from jina.ai
+      - key: EMBEDDING_BASE_URL
+        value: https://api.jina.ai/v1
+      - key: OPENAI_EMBEDDING_MODEL
+        value: jina-embeddings-v3
+      - key: EMBEDDING_DIMENSIONS
+        value: "1024"
+      # ── CORS ─────────────────────────────────────────────────────────────
+      - key: CORS_ORIGINS
+        sync: false        # e.g. https://your-app.vercel.app,http://localhost:3000

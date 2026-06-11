@@ -107,3 +107,56 @@ def test_quiz_endpoint_uses_graph(client, uploaded_doc_id):
     data = resp.json()
     assert "questions" in data
     assert "id" in data
+
+
+# ── reflection node tests ──────────────────────────────────────────────────────
+
+def test_chat_graph_has_reflection_state(uploaded_doc_id):
+    """After a normal answer the reflection field should be 'answer_ok'."""
+    final = chat_graph.invoke(
+        {
+            "document_id": uploaded_doc_id,
+            "task": "answer_question",
+            "question": "What is the main topic?",
+        }
+    )
+    assert final.get("reflection") == "answer_ok"
+    assert final.get("retry_count", 0) == 0
+
+
+def test_chat_graph_reflection_retry_increments(uploaded_doc_id, monkeypatch):
+    """If LLM returns a short fallback answer, reflect should trigger one retry."""
+    from app.services import llm as llm_mod
+    call_count = {"n": 0}
+
+    def _short_answer(*args, **kwargs):
+        call_count["n"] += 1
+        return "没有找到"  # triggers retry heuristic
+
+    monkeypatch.setattr(llm_mod, "answer_question", _short_answer)
+
+    final = chat_graph.invoke(
+        {
+            "document_id": uploaded_doc_id,
+            "task": "answer_question",
+            "question": "obscure query",
+        }
+    )
+    # Should have retried once (MAX_RETRIES=1), then settled
+    assert call_count["n"] == 2
+    assert final.get("retry_count", 0) == 1
+
+
+def test_chat_graph_no_infinite_retry(uploaded_doc_id, monkeypatch):
+    """Even with persistent fallback answers, graph must terminate."""
+    from app.services import llm as llm_mod
+    monkeypatch.setattr(llm_mod, "answer_question", lambda *a, **kw: "没有找到")
+    # Should complete without hanging
+    final = chat_graph.invoke(
+        {
+            "document_id": uploaded_doc_id,
+            "task": "answer_question",
+            "question": "anything",
+        }
+    )
+    assert "result" in final

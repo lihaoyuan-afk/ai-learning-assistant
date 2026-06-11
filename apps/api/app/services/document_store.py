@@ -245,6 +245,31 @@ def score_and_save_attempt(
     return attempt
 
 
+def list_quizzes(document_id: str) -> list:
+    """Return summary list of all quizzes for a document (most recent first)."""
+    from app.models.quiz import Quiz, QuizQuestion as QQModel
+    from app.schemas.quiz import QuizSummary
+
+    with _db.db_session() as db:
+        quizzes = (
+            db.query(Quiz)
+            .filter(Quiz.document_id == document_id)
+            .order_by(Quiz.created_at.desc())
+            .all()
+        )
+        result = []
+        for q in quizzes:
+            count = db.query(QQModel).filter(QQModel.quiz_id == q.id).count()
+            result.append(QuizSummary(
+                id=q.id,
+                title=q.title,
+                difficulty=q.difficulty,
+                question_count=count,
+                created_at=q.created_at.isoformat(),
+            ))
+        return result
+
+
 def get_quiz(document_id: str, quiz_id: str) -> QuizResponse | None:
     with _db.db_session() as db:
         quiz = db.query(Quiz).filter(

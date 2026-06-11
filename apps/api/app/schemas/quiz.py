@@ -5,6 +5,18 @@ class QuizRequest(BaseModel):
     num_questions: int = Field(default=6, ge=1, le=12)
 
 
+class QuizSummary(BaseModel):
+    id: str
+    title: str
+    difficulty: str
+    question_count: int
+    created_at: str
+
+
+class QuizListResponse(BaseModel):
+    quizzes: list[QuizSummary]
+
+
 class QuizQuestion(BaseModel):
     id: str
     type: str
