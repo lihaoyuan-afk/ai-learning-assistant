@@ -4,7 +4,7 @@ from uuid import UUID
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, FieldCondition, Filter, FilterSelector,
-    MatchValue, PointStruct, VectorParams,
+    KeywordIndexParams, MatchValue, PayloadSchemaType, PointStruct, VectorParams,
 )
 
 from app.core.config import settings
@@ -40,6 +40,12 @@ class VectorStore:
                     size=settings.embedding_dimensions,
                     distance=Distance.COSINE,
                 ),
+            )
+            # Create payload index so filtered queries work under Qdrant Cloud strict mode
+            client.create_payload_index(
+                collection_name=settings.qdrant_collection,
+                field_name="document_id",
+                field_schema=PayloadSchemaType.KEYWORD,
             )
 
     def upsert_chunks(self, chunks: list[SourceChunk]) -> None:
