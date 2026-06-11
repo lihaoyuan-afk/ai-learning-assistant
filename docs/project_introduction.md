@@ -18,7 +18,7 @@
 | Quiz 自动出题 | LLM 生成含答案/解析/知识点的多题型测验，支持历史记录查阅 |
 | 掌握度追踪 | 答题后自动更新各知识点掌握度评分（0-100），记录对错次数 |
 | 间隔复习计划 | 基于掌握度自动安排复习时间（弱点 2 天/中等 5 天/已掌握 14 天）|
-| AI 学习规划 | 对话式 Agent 分析薄弱知识点，生成优先级排序的文档学习计划 |
+| AI 学习规划 | Agent 分析薄弱知识点，生成优先级排序的文档学习计划 |
 | 跨文档全局搜索 | 跨所有已上传文档进行语义检索，支持多轮追问 |
 
 ---
@@ -42,14 +42,14 @@
 │         │                         │                  │
 │  ┌──────▼─────────────────────────▼─────────────┐   │
 │  │              核心服务层                        │   │
-│  │  embeddings · retrieval · llm · chunker      │   │
-│  │  mastery_service · planning_service           │   │
+│  │  embeddings · retrieval(BM25+vector) · llm   │   │
+│  │  chunker · mastery_service · planning_service │   │
 │  └──────────────────────────────────────────────┘   │
 └────────────┬──────────────────┬──────────────────────┘
              │                  │
     ┌────────▼───────┐  ┌───────▼────────┐
     │  SQLite / PG   │  │  Qdrant 向量库  │
-    │ (文档/Quiz/掌握度)│ │  (chunk embeddings) │
+    │ 文档/Quiz/掌握度 │  │ chunk embeddings│
     └────────────────┘  └────────────────┘
 ```
 
@@ -59,38 +59,75 @@
 | --- | --- |
 | 前端 | Next.js 15、React 19、TypeScript |
 | 后端 | Python 3.12、FastAPI、Pydantic v2 |
-| AI 编排 | LangGraph（有向状态图，支持条件路由） |
+| AI 编排 | LangGraph（有向状态图，支持条件路由与循环） |
 | 向量数据库 | Qdrant（本地文件模式 / Docker 模式） |
 | 关系数据库 | SQLite（开发）/ PostgreSQL（生产） |
-| LLM | Ollama 本地推理（qwen2.5:7b）/ DeepSeek API |
+| LLM | Ollama 本地推理（qwen2.5:7b）/ OpenAI 兼容 API |
 | Embeddings | nomic-embed-text（768 维） |
-| 测试 | pytest + TestClient + 内存 SQLite + 内存 Qdrant |
+| 测试 | pytest · 95 个测试 · 全离线（内存 Qdrant + mock LLM）|
 
 ---
 
 ## 核心 AI 设计亮点
 
-### 1. RAG 管线 + BM25 混合重排
+### 1. LLM 工具调用（Function Calling）路由
 
-向量检索后对候选文本进行 BM25 二次排序，综合分 = 0.7 × 向量相似度 + 0.3 × BM25 关键词匹配。相比纯向量检索，在关键词较强的查询下准确率明显提升。BM25 库不存在时自动降级，不影响核心流程。
+Chat Agent 的入口节点 `decide` 通过工具调用让 LLM **自主决定**是否需要检索文档，并同步精炼查询词：
 
-### 2. LangGraph Reflection 节点
+```python
+tools = [
+    {"name": "retrieve_and_answer",  # 需要查文档时调用，携带 refined_query
+     "description": "需要查阅文档内容时调用，适用于事实/数据/方法等问题"},
+    {"name": "answer_directly",      # 不需要文档时调用（闲聊/常识）
+     "description": "不需要查文档即可回答时调用"},
+]
+```
 
-Chat Agent 加入自我反思节点：回答生成后检测是否为回退信号（过短、含"没有找到"等），若是则自动扩大检索范围重试一次，之后无论结果如何终止，防止无限循环。实现了 `retrieve → answer → reflect → [retry | END]` 的有状态 Agent 循环。
+`refined_query` 是工具调用返回的精炼检索词（去除口语化表达，保留核心关键词），直接传入 Qdrant 检索，提升召回质量。工具调用失败时安全降级为始终检索，不中断服务。
 
-### 3. 语义分块
+### 2. 完整的有状态 Chat Graph
 
-彻底替换固定长度分块：按段落边界（双换行）切块，过长段落再做字符级 overlap 分割，相邻小尾部仅在同一页内合并，保证语义完整性和页码准确性。
+结合工具调用路由、RAG 检索与 Reflection 自我反思，Chat Graph 形成完整的 Agent 决策环路：
 
-### 4. 流式 SSE 输出
+```
+decide(tool calling)
+    ↓ needs_retrieval=True             ↓ needs_retrieval=False
+retrieve(refined_query, limit=5)    direct_answer
+    ↓                                   ↓
+answer                                 END
+    ↓
+reflect（检测回退信号）
+    ↓ answer_insufficient              ↓ answer_ok
+retrieve(limit=8, 扩大召回)            END
+    ↓
+answer → reflect → END（最多重试1次）
+```
 
-问答和总结均使用 SSE（Server-Sent Events）流式推送。后端在 FastAPI 中用 `StreamingResponse` + `Generator` 实现，前端用 `ReadableStream` 逐行解析 `data:` 事件，用户无需等待完整响应即可看到内容逐字输出。总结有缓存时以 30 字符分块快速流出，区分"缓存"与"新生成"体验。
+三类节点各司其职：`decide` 负责工具调用路由，`reflect` 负责质量自检与重试，`retry_count` 上限防止无限循环。
 
-### 5. 掌握度 + 间隔复习
+### 3. RAG 管线 + BM25 混合重排
 
-每次 Quiz 答题后，按知识点更新掌握度评分：答对 +8，答错 -15，新知识点初始 50 分。评分触发不同复习间隔（2/5/14 天），实现类 Anki 的 SRS（间隔重复系统）效果。
+向量检索后对候选文本进行 BM25 二次排序：
 
-### 6. 学习规划 Agent
+```
+综合分 = 0.7 × cosine_similarity + 0.3 × bm25_score
+```
+
+向量召回 3× 候选（15 个），BM25 精筛到 Top 5。相比纯向量检索，在精确关键词查询（如专有名词、指标数据）下准确率明显提升。`rank-bm25` 不可用时自动降级，不影响服务可用性。
+
+### 4. 语义分块
+
+彻底替换固定长度分块：按段落边界（`\n\n`）切块，过长段落再做字符级 overlap 分割，相邻小尾部仅在同一页内合并，保证语义完整性和页码准确性。
+
+### 5. 流式 SSE 输出
+
+问答和总结均使用 SSE（Server-Sent Events）流式推送。总结有缓存时以 30 字符分块快速回放并发送 `{"type":"cached"}` 事件，无缓存时 LLM 流式生成后自动存库，前端区分两种体验。
+
+### 6. 掌握度 + 间隔复习（SRS）
+
+每次 Quiz 答题后按知识点更新评分：答对 +8，答错 -15，新知识点初始 50 分。评分触发不同复习间隔（2/5/14 天），实现类 Anki 的间隔重复效果。
+
+### 7. 学习规划 Agent
 
 调用 LLM 综合掌握度弱点和文档列表，生成优先级排序的个性化学习计划。JSON 解析失败时降级为启发式排序，不中断用户流程。
 
@@ -100,35 +137,36 @@ Chat Agent 加入自我反思节点：回答生成后检测是否为回退信号
 
 ### 全面的测试覆盖
 
-88 个 pytest 测试，覆盖：
-- 文档上传/解析/状态管理
-- 向量存储写入与检索（内存 Qdrant）
-- LLM 调用层（全量 mock，不依赖真实模型）
-- LangGraph 三条图的状态转换
-- Reflection 循环：正常/重试/防无限循环
-- Quiz 历史/提交/评分
-- 掌握度更新/间隔复习
-- 学习规划：schema/降级/mock LLM
+**95 个 pytest 测试**，全部离线，CI 可直接运行：
 
-所有测试完全离线，CI 可直接运行。
+| 测试文件 | 覆盖内容 |
+| --- | --- |
+| test_upload | 文档上传/解析/状态管理 |
+| test_vector_store | 向量写入/检索/删除（内存 Qdrant）|
+| test_chat / test_summary / test_quiz | LLM 路由层（全量 mock）|
+| test_graph | LangGraph 三条图状态转换 |
+| test_tool_calling | Function Calling：路由/精炼查询/降级/direct_answer 路径 |
+| test_phase5 | 删除文档/SSE 流式/多轮对话/全局搜索 |
+| test_mastery / test_review | 掌握度更新/间隔复习 |
+| test_plan | 学习规划 schema/降级/mock LLM |
 
 ### 可靠的错误处理
 
-- 上传层：扩展名/文件大小/损坏文件三重校验
-- 后端恢复：服务重启时自动将中断的 `processing` 文档标记为 `failed`
-- LLM 层：deepseek-r1 `<think>` 标签剥离；JSON 模式降级；JSON 解析失败时回退到启发式处理
-- Agent 层：每个 LangGraph 节点独立 try/except，错误写入状态而非中断图
+- **上传层**：扩展名/文件大小/损坏文件三重校验
+- **后端恢复**：服务重启时自动将中断的 `processing` 文档标记为 `failed`
+- **LLM 层**：deepseek-r1 `<think>` 标签剥离；JSON 模式降级；工具调用失败安全回退
+- **Agent 层**：每个 LangGraph 节点独立 try/except，错误写入状态而非中断图
 
 ### 前端体验细节
 
-- 异步上传：立即返回，前端每 2.5 秒轮询状态，分三阶段展示（处理中/就绪/失败）
+- 异步上传：立即返回，前端每 2.5 秒轮询状态
 - 多轮对话 localStorage 持久化（刷新不丢失）
 - SSE 来源折叠展示（`<details>` 折叠避免干扰阅读）
 - 文档详情按状态灰显/启用功能入口
 
 ### Docker Compose 可部署
 
-`infra/docker-compose.yml` 包含 postgres、qdrant、redis、api 四个服务，所有基础设施服务带 healthcheck，API 服务 `depends_on: condition: service_healthy`，一键启动整套生产等效环境。
+`infra/docker-compose.yml` 包含 postgres、qdrant、redis、api 四个服务，所有服务带 healthcheck，API 服务 `depends_on: condition: service_healthy`，一键启动整套生产等效环境。
 
 ---
 
@@ -136,21 +174,22 @@ Chat Agent 加入自我反思节点：回答生成后检测是否为回退信号
 
 | 指标 | 数值 |
 | --- | --- |
-| 后端代码 | ~3,000 行 Python |
+| 后端代码 | ~3,200 行 Python |
 | 前端代码 | ~2,500 行 TypeScript/TSX |
-| 测试用例 | 88 个（全离线，全通过）|
-| API 端点 | 18 个 |
+| 测试用例 | 95 个（全离线，全通过）|
+| API 端点 | 19 个 |
 | 前端页面/路由 | 11 个 |
-| 文档 | 9 份技术文档 |
+| 技术文档 | 6 份（架构/API/Agent工作流/数据模型/项目介绍/面试笔记）|
 | 开发周期 | ~2 周（独立完成）|
 
 ---
 
 ## 我的技术成长
 
-这个项目对我最大的收获不是堆砌功能，而是在实际问题中理解 AI 工程中的取舍：
+这个项目最大的收获不是堆砌功能，而是在真实工程问题中理解 AI 系统的取舍：
 
-- **为什么要重排：** 纯向量检索在关键词查询下精度不足，加 BM25 是业界常见的 Hybrid Search 做法，亲手实现后对 RAG 管线有了更深的感受。
-- **为什么 Reflection 不能无限循环：** LangGraph 条件路由如果没有 `retry_count` 上限，理论上可以无限重试。设计有状态 Agent 时终止条件是第一公民。
+- **Function Calling 的价值：** 最初路由是硬编码的，后来加了 decide 节点让 LLM 自主决策。这不只是技术升级，更让我理解了"让模型做判断"和"让代码做判断"各自适用的边界——工具调用适合意图判断，显式路由适合确定性逻辑。
+- **为什么要 refined_query：** 用户问"帮我解释一下这个"时，直接用原问题检索效果很差。工具调用让 LLM 在决策的同时顺带精炼检索词，一次 LLM 调用同时完成两件事，这是工具调用相比普通路由的额外价值。
+- **Reflection 终止条件是第一公民：** LangGraph 条件路由如果没有 `retry_count` 上限，理论上可以无限重试。设计有状态 Agent 时，我学到的最重要的一条原则是：终止条件必须在设计阶段就确定，不能等到出问题再补。
+- **小模型的限制与应对：** 本机 1.5B 参数模型几乎无法稳定输出合法 JSON，换 7B 后质量跃升。这让我理解了模型规模、上下文窗口（num_ctx）对工程可靠性的实际影响，以及为什么工业界用 structured output 强制格式。
 - **为什么先跑通再优化：** 项目一开始 LLM 层是占位实现，但架构分层做好了，后来替换真实模型时只改了一两个文件，其余测试无需改动。这让我真正理解了"接缝在哪"的重要性。
-- **小模型的限制与应对：** 本机 1.5B 参数模型几乎无法生成合法 JSON，换 7B 后质量跃升。这让我理解了模型规模、上下文窗口（num_ctx）、temperature 等参数对工程可靠性的实际影响。
