@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# Env / secrets
+.env
+.env.*
+
+# Databases
+data/
+*.db
+*.sqlite3
+
+# Uploads & generated storage
+uploads/
+qdrant_storage/
+
+# Node / Next.js
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+.npm/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
