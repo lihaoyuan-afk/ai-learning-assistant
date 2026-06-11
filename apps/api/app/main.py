@@ -1,10 +1,23 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api import routes_chat, routes_documents, routes_profile, routes_quiz, routes_search, routes_summary
 from app.core.config import settings
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+async def _verify_demo(
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
+) -> None:
+    """Require Authorization: Bearer <DEMO_PASSWORD> when DEMO_PASSWORD is set."""
+    if not settings.demo_password:
+        return
+    if credentials is None or credentials.credentials != settings.demo_password:
+        raise HTTPException(status_code=401, detail="请输入访问密码")
 
 
 @asynccontextmanager
@@ -45,12 +58,13 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
 
-    app.include_router(routes_documents.router)
-    app.include_router(routes_chat.router)
-    app.include_router(routes_summary.router)
-    app.include_router(routes_quiz.router)
-    app.include_router(routes_profile.router)
-    app.include_router(routes_search.router)
+    _auth = [Depends(_verify_demo)]
+    app.include_router(routes_documents.router, dependencies=_auth)
+    app.include_router(routes_chat.router, dependencies=_auth)
+    app.include_router(routes_summary.router, dependencies=_auth)
+    app.include_router(routes_quiz.router, dependencies=_auth)
+    app.include_router(routes_profile.router, dependencies=_auth)
+    app.include_router(routes_search.router, dependencies=_auth)
     return app
 
 

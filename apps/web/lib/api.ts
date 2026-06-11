@@ -15,11 +15,34 @@ import type {
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+// ── Demo auth token (stored in localStorage) ──────────────────────────────────
+export function getDemoToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("demo_token");
+}
+export function setDemoToken(token: string): void {
+  localStorage.setItem("demo_token", token);
+}
+export function clearDemoToken(): void {
+  localStorage.removeItem("demo_token");
+}
+function authHeaders(): Record<string, string> {
+  const token = getDemoToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: "no-store",
-    ...init
+    ...init,
+    headers: { ...authHeaders(), ...(init?.headers as Record<string, string> ?? {}) },
   });
+
+  if (response.status === 401) {
+    clearDemoToken();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("请先登录");
+  }
 
   if (!response.ok) {
     let detail = `请求失败（${response.status}）`;
@@ -127,7 +150,7 @@ export type HistoryMessage = { role: "user" | "assistant"; content: string };
 async function* _streamSse(url: string, body: object): AsyncGenerator<StreamEvent> {
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
 

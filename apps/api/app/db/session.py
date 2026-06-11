@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from typing import Generator
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -8,18 +9,22 @@ from app.core.config import settings
 
 
 def _build_url(raw: str) -> str:
-    """Neon/Supabase hand out postgresql:// URLs; psycopg3 needs postgresql+psycopg://."""
+    """Normalize postgresql:// to postgresql+psycopg:// and strip pooler-incompatible params."""
     if raw.startswith("postgresql://") or raw.startswith("postgres://"):
-        return raw.replace("postgresql://", "postgresql+psycopg://", 1).replace(
+        url = raw.replace("postgresql://", "postgresql+psycopg://", 1).replace(
             "postgres://", "postgresql+psycopg://", 1
         )
+        parsed = urlparse(url)
+        qs = {k: v[0] for k, v in parse_qs(parsed.query).items() if k != "channel_binding"}
+        return urlunparse(parsed._replace(query=urlencode(qs)))
     return raw
 
 
 _url = _build_url(settings.database_url)
-_connect_args = {"check_same_thread": False} if "sqlite" in _url else {}
+_is_sqlite = "sqlite" in _url
+_connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
-engine = create_engine(_url, connect_args=_connect_args)
+engine = create_engine(_url, connect_args=_connect_args, pool_pre_ping=not _is_sqlite)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

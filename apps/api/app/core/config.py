@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     qdrant_collection: str = "learning_chunks"
     qdrant_api_key: str | None = None
 
+    # Demo auth — if set, all API routes require Authorization: Bearer <password>
+    demo_password: str | None = None
+
     # CORS — comma-separated origins accepted in env var
     cors_origins: list[str] = ["http://localhost:3000", "http://10.140.178.184:3000"]
 
