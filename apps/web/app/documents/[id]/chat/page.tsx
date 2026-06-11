@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { streamChat } from "@/lib/api";
@@ -13,6 +13,8 @@ type MessageEntry = {
   sources?: SourceChunk[];
 };
 
+const STORAGE_KEY = (id: string) => `chat-history-${id}`;
+
 export default function DocumentChatPage() {
   const params = useParams<{ id: string }>();
   const documentId = params.id;
@@ -20,6 +22,27 @@ export default function DocumentChatPage() {
   const [messages, setMessages] = useState<MessageEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const initializedRef = useRef(false);
+
+  // Restore history from localStorage on mount
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY(documentId));
+      if (stored) setMessages(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, [documentId]);
+
+  // Persist history to localStorage whenever messages change
+  useEffect(() => {
+    if (!initializedRef.current) return;
+    if (messages.length > 0) {
+      localStorage.setItem(STORAGE_KEY(documentId), JSON.stringify(messages));
+    } else {
+      localStorage.removeItem(STORAGE_KEY(documentId));
+    }
+  }, [messages, documentId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,7 +113,10 @@ export default function DocumentChatPage() {
         {messages.length > 0 && (
           <button
             className="button"
-            onClick={() => setMessages([])}
+            onClick={() => {
+              setMessages([]);
+              localStorage.removeItem(STORAGE_KEY(documentId));
+            }}
             type="button"
             style={{ opacity: 0.7 }}
           >

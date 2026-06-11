@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
-import { streamGlobalSearch } from "@/lib/api";
+import { getDocuments, streamGlobalSearch } from "@/lib/api";
 import type { HistoryMessage } from "@/lib/api";
 import type { SourceChunk } from "@/lib/types";
 
@@ -18,6 +18,22 @@ export default function GlobalSearchPage() {
   const [messages, setMessages] = useState<MessageEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [docTitles, setDocTitles] = useState<Record<string, string>>({});
+
+  // Load document id→title map so source chips show real names
+  useEffect(() => {
+    getDocuments()
+      .then((res) => {
+        const map: Record<string, string> = {};
+        res.documents.forEach((doc) => { map[doc.id] = doc.title; });
+        setDocTitles(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  function docLabel(id: string): string {
+    return docTitles[id] ?? `文档 ${id.slice(0, 8)}…`;
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -117,7 +133,7 @@ export default function GlobalSearchPage() {
                 <article className="card" key={chunk.id} style={{ marginTop: "0.5rem" }}>
                   <p style={{ fontSize: "0.8rem", opacity: 0.6, marginBottom: "0.25rem" }}>
                     <Link href={`/documents/${chunk.document_id}`} style={{ textDecoration: "underline" }}>
-                      文档 {chunk.document_id.slice(0, 8)}…
+                      {docLabel(chunk.document_id)}
                     </Link>
                     {" · "}第 {chunk.page_number ?? "?"} 页
                     {chunk.score != null ? `  ·  相关度 ${(chunk.score * 100).toFixed(0)}%` : ""}

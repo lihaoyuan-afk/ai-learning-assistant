@@ -3,7 +3,6 @@ import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.agents.graph import chat_graph
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.document import SourceChunk
 from app.services.document_store import get_document
@@ -24,17 +23,12 @@ def chat_with_document(document_id: str, request: ChatRequest) -> ChatResponse:
             detail=f"Document is not ready for querying (status: {doc.status}).",
         )
 
+    chunks = _retrieval.retrieve_context(document_id, request.question)
     try:
-        final = chat_graph.invoke(
-            {"document_id": document_id, "task": "answer_question", "question": request.question}
-        )
+        answer = _llm.answer_question(request.question, chunks, history=request.history)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc
-
-    if final.get("error"):
-        raise HTTPException(status_code=500, detail=final["error"])
-
-    return ChatResponse(answer=final["result"], sources=final.get("chunks", []))
+        raise HTTPException(status_code=500, detail=f"LLM error: {exc}") from exc
+    return ChatResponse(answer=answer, sources=chunks)
 
 
 @router.post("/stream")

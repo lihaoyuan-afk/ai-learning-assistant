@@ -84,14 +84,18 @@ def call_chat_json(messages: list[dict], max_tokens: int = 3000) -> str:
     return raw or "{}"
 
 
-def answer_question(question: str, chunks: list[SourceChunk]) -> str:
+def answer_question(
+    question: str,
+    chunks: list[SourceChunk],
+    history: list[dict] | None = None,
+) -> str:
     if not chunks:
         return "未检索到相关文档片段，请确保文档已完成解析。"
 
     context = "\n\n".join(
         f"[第{c.page_number or '?'}页] {c.content}" for c in chunks
     )
-    messages = [
+    messages: list[dict] = [
         {
             "role": "system",
             "content": (
@@ -100,8 +104,10 @@ def answer_question(question: str, chunks: list[SourceChunk]) -> str:
                 "如果文档中没有相关信息，请如实说明，不要编造内容。"
             ),
         },
-        {"role": "user", "content": f"文档片段：\n{context}\n\n问题：{question}"},
     ]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": f"文档片段：\n{context}\n\n问题：{question}"})
     return call_chat(messages, max_tokens=1200)
 
 
