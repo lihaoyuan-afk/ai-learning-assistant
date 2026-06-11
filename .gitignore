@@ -48,3 +48,14 @@ logs/
 
 # Claude Code internals
 .claude/
+
+# Internal / personal docs (not for public repo)
+CLAUDE.md
+PROJECT_SKELETON.md
+task_plan.md
+progress.md
+findings.md
+docs/project_introduction.md
+docs/interview_tech_notes.md
+docs/interview_pitch.md
+docs/reference/
