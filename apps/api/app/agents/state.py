@@ -17,3 +17,5 @@ class AgentState(TypedDict, total=False):
     reflection: str         # reflection node's assessment
     retry_count: int        # how many times we've retried retrieval
     history: list[dict]     # conversation history for multi-turn chat
+    needs_retrieval: bool   # set by decide node via tool calling
+    refined_query: str      # LLM-optimised retrieval query from tool call

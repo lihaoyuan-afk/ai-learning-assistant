@@ -1,7 +1,12 @@
 """
 LangGraph graphs for the three main agent flows.
 
-chat_graph:    retrieve → answer → reflect → [retry→retrieve | done→END]
+chat_graph:    decide(tool calling) → route
+                 ↓ needs_retrieval=True    ↓ needs_retrieval=False
+               retrieve                direct_answer → END
+                 ↓
+               answer → reflect → [retry→retrieve | END]
+
 summary_graph: retrieve_all → summarize → END
 quiz_graph:    retrieve_all → generate_quiz → END
 
@@ -18,11 +23,48 @@ _MAX_RETRIES = 1
 
 # ── node functions ─────────────────────────────────────────────────────────────
 
+def _decide(state: AgentState) -> dict:
+    """Use LLM tool calling to decide if retrieval is needed and refine the query."""
+    try:
+        from app.services.llm import decide_retrieval
+        needs_retrieval, refined_query = decide_retrieval(state.get("question", ""))
+        return {
+            "needs_retrieval": needs_retrieval,
+            "refined_query": refined_query or state.get("question", ""),
+        }
+    except Exception:
+        return {"needs_retrieval": True, "refined_query": state.get("question", "")}
+
+
+def _route_after_decide(state: AgentState) -> str:
+    if state.get("needs_retrieval", True):
+        return "retrieve"
+    return "direct_answer"
+
+
+def _direct_answer(state: AgentState) -> dict:
+    """Answer general/conversational questions without document retrieval."""
+    try:
+        from app.services.llm import call_chat
+        question = state.get("question", "")
+        messages: list[dict] = [
+            {"role": "system", "content": "你是一位友好的学习助手，请直接回答用户的问题。"},
+        ]
+        history = state.get("history") or []
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": question})
+        return {"result": call_chat(messages, max_tokens=800)}
+    except Exception as exc:
+        return {"result": f"回答失败：{exc}", "error": str(exc)}
+
+
 def _retrieve(state: AgentState) -> dict:
     try:
         from app.services.retrieval import retrieve_context
         retry_count = state.get("retry_count", 0)
-        query = state.get("question", "")
+        # Use tool-calling refined query if available; fall back to original question
+        query = state.get("refined_query") or state.get("question", "")
         # On retry, increase retrieval limit to cast a wider net
         limit = 8 if retry_count > 0 else 5
         chunks = retrieve_context(
@@ -128,10 +170,18 @@ def _generate_quiz(state: AgentState) -> dict:
 
 def _build_chat_graph():
     g = StateGraph(AgentState)
+    g.add_node("decide", _decide)
     g.add_node("retrieve", _retrieve)
+    g.add_node("direct_answer", _direct_answer)
     g.add_node("answer", _answer)
     g.add_node("reflect", _reflect)
-    g.set_entry_point("retrieve")
+    g.set_entry_point("decide")
+    g.add_conditional_edges(
+        "decide",
+        _route_after_decide,
+        {"retrieve": "retrieve", "direct_answer": "direct_answer"},
+    )
+    g.add_edge("direct_answer", END)
     g.add_edge("retrieve", "answer")
     g.add_edge("answer", "reflect")
     g.add_conditional_edges("reflect", _route_after_reflect, {"retrieve": "retrieve", END: END})

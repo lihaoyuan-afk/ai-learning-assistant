@@ -173,3 +173,82 @@ def stream_answer_question(
         messages.extend(history)
     messages.append({"role": "user", "content": f"文档片段：\n{context}\n\n问题：{question}"})
     yield from stream_chat(messages, max_tokens=1200)
+
+
+# ── Tool calling: retrieval routing ──────────────────────────────────────────
+
+_DECIDE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "retrieve_and_answer",
+            "description": (
+                "需要查阅上传文档的内容才能回答时调用。"
+                "适用于：问文档里的事实、数据、方法、结论、具体章节内容等。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "refined_query": {
+                        "type": "string",
+                        "description": (
+                            "用于向量检索的精炼查询词，可与原问题措辞不同，"
+                            "去掉口语化表达，保留核心关键词，有利于语义检索。"
+                        ),
+                    }
+                },
+                "required": ["refined_query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "answer_directly",
+            "description": (
+                "不需要查阅文档即可回答时调用。"
+                "适用于：打招呼、闲聊、或纯粹的常识/通用知识问题。"
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+]
+
+
+def decide_retrieval(question: str) -> tuple[bool, str]:
+    """Use LLM tool calling to decide if retrieval is needed.
+
+    Returns (needs_retrieval, refined_query).
+    Falls back to (True, question) if tool calling is unsupported or fails.
+    """
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是一个路由助手。判断用户的问题是否需要查阅上传的文档才能回答，"
+                "选择合适的工具。"
+            ),
+        },
+        {"role": "user", "content": question},
+    ]
+    try:
+        response = _get_client().chat.completions.create(
+            model=settings.openai_chat_model,
+            messages=messages,
+            tools=_DECIDE_TOOLS,
+            tool_choice="required",
+            max_tokens=200,
+            extra_body=_ollama_extra(),
+        )
+        message = response.choices[0].message
+        if message.tool_calls:
+            call = message.tool_calls[0]
+            if call.function.name == "answer_directly":
+                return False, ""
+            args = json.loads(call.function.arguments or "{}")
+            refined = args.get("refined_query", question)
+            return True, refined or question
+    except Exception:
+        pass
+    # Safe fallback: always retrieve when uncertain
+    return True, question

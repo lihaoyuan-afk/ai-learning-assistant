@@ -134,9 +134,14 @@ def mock_llm(monkeypatch):
     def _mock_stream_answer(question, chunks, **_):
         yield "这是一个较长的测试回答，根据文档内容整理，涵盖主要知识点，供单元测试验证使用。"
 
+    def _mock_decide_retrieval(question: str) -> tuple[bool, str]:
+        # Default: always retrieve (safe path) so existing tests are unaffected
+        return True, question
+
     monkeypatch.setattr(llm, "call_chat", _mock_call_chat)
     monkeypatch.setattr(llm, "stream_chat", _mock_stream_chat)
     monkeypatch.setattr(llm, "stream_answer_question", _mock_stream_answer)
+    monkeypatch.setattr(llm, "decide_retrieval", _mock_decide_retrieval)
     monkeypatch.setattr(
         llm,
         "call_chat_json",
