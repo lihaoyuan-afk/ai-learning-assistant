@@ -37,6 +37,8 @@ def _run_column_migrations(engine) -> None:
     with engine.connect() as conn:
         for table, column, col_def in [
             ("documents", "user_id", "TEXT"),
+            ("documents", "is_public", "INTEGER DEFAULT 0"),
+            ("documents", "forked_from", "TEXT"),
             ("learning_memory", "user_id", "TEXT"),
         ]:
             try:

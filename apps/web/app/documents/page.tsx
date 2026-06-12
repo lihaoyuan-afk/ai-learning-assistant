@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { deleteDocument, getDocuments } from "@/lib/api";
+import { deleteDocument, getDocuments, setDocumentVisibility } from "@/lib/api";
 import { StatusPill } from "@/components/status-pill";
 import type { DocumentRead } from "@/lib/types";
 
@@ -28,6 +28,7 @@ export default function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function fetchDocs() {
@@ -70,6 +71,20 @@ export default function DocumentsPage() {
       }
     };
   }, [documents]);
+
+  async function handleToggleVisibility(e: React.MouseEvent, doc: DocumentRead) {
+    e.preventDefault();
+    e.stopPropagation();
+    setTogglingId(doc.id);
+    try {
+      const updated = await setDocumentVisibility(doc.id, !doc.is_public);
+      setDocuments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "操作失败");
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   async function handleDelete(e: React.MouseEvent, documentId: string) {
     e.preventDefault();
@@ -167,27 +182,43 @@ export default function DocumentsPage() {
                   {new Date(document.created_at).toLocaleString("zh-CN")}
                 </p>
               </Link>
-              <button
-                onClick={(e) => handleDelete(e, document.id)}
-                disabled={deletingId === document.id}
-                title="删除文档"
-                style={{
-                  position: "absolute",
-                  top: "0.75rem",
-                  right: "0.75rem",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--color-danger, #c0392b)",
-                  fontSize: "1rem",
-                  opacity: deletingId === document.id ? 0.4 : 0.6,
-                  padding: "0.25rem",
-                  lineHeight: 1,
-                  zIndex: 1,
-                }}
-              >
-                {deletingId === document.id ? "…" : "✕"}
-              </button>
+              <div style={{ position: "absolute", top: "0.75rem", right: "0.75rem", display: "flex", gap: "0.4rem", zIndex: 1 }}>
+                <button
+                  onClick={(e) => handleToggleVisibility(e, document)}
+                  disabled={togglingId === document.id}
+                  title={document.is_public ? "设为私有" : "公开分享"}
+                  style={{
+                    background: document.is_public ? "#e8f5e9" : "none",
+                    border: `1px solid ${document.is_public ? "#4caf50" : "var(--border, #ddd)"}`,
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    color: document.is_public ? "#2e7d32" : "var(--text-muted, #999)",
+                    fontSize: "0.7rem",
+                    opacity: togglingId === document.id ? 0.4 : 1,
+                    padding: "0.15rem 0.4rem",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {togglingId === document.id ? "…" : document.is_public ? "公开" : "私有"}
+                </button>
+                <button
+                  onClick={(e) => handleDelete(e, document.id)}
+                  disabled={deletingId === document.id}
+                  title="删除文档"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--color-danger, #c0392b)",
+                    fontSize: "1rem",
+                    opacity: deletingId === document.id ? 0.4 : 0.6,
+                    padding: "0.25rem",
+                    lineHeight: 1,
+                  }}
+                >
+                  {deletingId === document.id ? "…" : "✕"}
+                </button>
+              </div>
             </div>
           ))
         )}

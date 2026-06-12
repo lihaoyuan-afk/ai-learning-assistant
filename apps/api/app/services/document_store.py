@@ -25,6 +25,8 @@ def _doc_to_read(doc: Document) -> DocumentRead:
         status=DocumentStatus(doc.status),
         file_path=doc.file_path,
         summary=doc.summary,
+        is_public=getattr(doc, "is_public", False) or False,
+        forked_from=getattr(doc, "forked_from", None),
         created_at=doc.created_at,
     )
 
@@ -132,6 +134,88 @@ def delete_document(document_id: str, user_id: str | None = None) -> None:
             Path(file_path).unlink(missing_ok=True)
         except Exception:
             pass
+
+
+# ── public library ───────────────────────────────────────────────────────────
+
+def list_public_documents() -> list[DocumentRead]:
+    """Return all documents marked as public, newest first."""
+    with _db.db_session() as db:
+        rows = (
+            db.query(Document)
+            .filter(Document.is_public.is_(True))
+            .order_by(Document.created_at.desc())
+            .all()
+        )
+        return [_doc_to_read(r) for r in rows]
+
+
+def set_document_visibility(
+    document_id: str, is_public: bool, user_id: str | None = None
+) -> DocumentRead:
+    with _db.db_session() as db:
+        q = db.query(Document).filter(Document.id == document_id)
+        if user_id is not None:
+            q = q.filter(Document.user_id == user_id)
+        doc = q.first()
+        if doc is None:
+            raise ValueError(f"Document not found: {document_id}")
+        doc.is_public = is_public
+        db.flush()
+        return _doc_to_read(doc)
+
+
+def fork_document(document_id: str, user_id: str) -> DocumentRead:
+    """Copy a public document (chunks + vectors) into the forking user's library."""
+    new_id = uuid4().hex
+
+    with _db.db_session() as db:
+        source = (
+            db.query(Document)
+            .filter(Document.id == document_id, Document.is_public.is_(True))
+            .first()
+        )
+        if source is None:
+            raise ValueError("Public document not found")
+
+        new_doc = Document(
+            id=new_id,
+            title=source.title + "（副本）",
+            file_type=source.file_type,
+            file_path=source.file_path,
+            status=source.status,
+            summary=source.summary,
+            user_id=user_id,
+            is_public=False,
+            forked_from=document_id,
+        )
+        db.add(new_doc)
+        db.flush()
+        result = _doc_to_read(new_doc)
+
+    # Copy chunks + re-upsert vectors when source is ready
+    if result.status == "ready":
+        source_chunks = get_chunks(document_id)
+        if source_chunks:
+            new_chunks = [
+                SourceChunk(
+                    id=uuid4().hex,
+                    document_id=new_id,
+                    chunk_index=c.chunk_index,
+                    content=c.content,
+                    page_number=c.page_number,
+                    section_title=c.section_title,
+                )
+                for c in source_chunks
+            ]
+            save_chunks(new_id, new_chunks)
+            try:
+                from app.services.vector_store import vector_store
+                vector_store.upsert_chunks(new_chunks)
+            except Exception:
+                pass
+
+    return result
 
 
 # ── chunks ────────────────────────────────────────────────────────────────────

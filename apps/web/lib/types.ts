@@ -7,6 +7,8 @@ export type DocumentRead = {
   status: DocumentStatus;
   file_path?: string | null;
   summary?: string | null;
+  is_public: boolean;
+  forked_from?: string | null;
   created_at: string;
 };
 

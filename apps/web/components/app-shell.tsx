@@ -8,6 +8,7 @@ const navItems = [
   { href: "/", label: "工作台" },
   { href: "/documents", label: "资料" },
   { href: "/documents/upload", label: "导入资料" },
+  { href: "/library", label: "公共库" },
   { href: "/search", label: "全局搜索" },
   { href: "/review", label: "复习" },
   { href: "/error-notebook", label: "错题本" },

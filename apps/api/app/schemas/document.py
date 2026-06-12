@@ -28,6 +28,8 @@ class DocumentRead(BaseModel):
     status: DocumentStatus
     file_path: str | None = None
     summary: str | None = None
+    is_public: bool = False
+    forked_from: str | None = None
     created_at: datetime
 
 

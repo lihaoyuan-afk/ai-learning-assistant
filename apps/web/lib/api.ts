@@ -175,6 +175,27 @@ export async function deleteDocument(documentId: string): Promise<void> {
   });
 }
 
+export async function getPublicDocuments(): Promise<DocumentListResponse> {
+  return request<DocumentListResponse>("/documents/public");
+}
+
+export async function setDocumentVisibility(
+  documentId: string,
+  isPublic: boolean
+): Promise<DocumentRead> {
+  return request<DocumentRead>(`/documents/${documentId}/visibility`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_public: isPublic }),
+  });
+}
+
+export async function forkDocument(documentId: string): Promise<DocumentRead> {
+  return request<DocumentRead>(`/documents/public/${documentId}/fork`, {
+    method: "POST",
+  });
+}
+
 export async function importDocumentFromUrl(url: string): Promise<DocumentIngestResponse> {
   return request<DocumentIngestResponse>("/documents/import-url", {
     method: "POST",

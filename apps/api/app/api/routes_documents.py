@@ -1,10 +1,13 @@
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.api.deps import CurrentUserID
 from app.schemas.document import DocumentIngestResponse, DocumentListResponse, DocumentRead, ImportUrlRequest
 from app.services.document_parser import DocumentParseError
-from app.services.document_store import delete_document, get_document, list_documents
+from app.services.document_store import (
+    delete_document, fork_document, get_document, list_documents,
+    list_public_documents, set_document_visibility,
+)
 from app.workers.ingest_document import (
     create_url_document,
     ingest_document,
@@ -67,6 +70,23 @@ def read_documents(user_id: CurrentUserID) -> DocumentListResponse:
     return DocumentListResponse(documents=list_documents(user_id=user_id))
 
 
+@router.get("/public", response_model=DocumentListResponse)
+def read_public_documents(user_id: CurrentUserID) -> DocumentListResponse:
+    """List all documents marked public by their owners."""
+    return DocumentListResponse(documents=list_public_documents())
+
+
+@router.post("/public/{document_id}/fork", response_model=DocumentRead)
+def fork_public_document(document_id: str, user_id: CurrentUserID) -> DocumentRead:
+    """Fork a public document into the current user's library."""
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="演示模式不支持 fork，请注册账号")
+    try:
+        return fork_document(document_id, user_id=user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
 @router.get("/{document_id}", response_model=DocumentRead)
 def read_document(document_id: str, user_id: CurrentUserID) -> DocumentRead:
     document = get_document(document_id, user_id=user_id)
@@ -85,6 +105,19 @@ def remove_document(document_id: str, user_id: CurrentUserID) -> JSONResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Delete failed: {exc}") from exc
     return JSONResponse(content={"message": "Document deleted."})
+
+
+@router.patch("/{document_id}/visibility", response_model=DocumentRead)
+def set_visibility(
+    document_id: str,
+    user_id: CurrentUserID,
+    is_public: bool = Body(..., embed=True),
+) -> DocumentRead:
+    """Toggle a document's public visibility (owner only)."""
+    try:
+        return set_document_visibility(document_id, is_public=is_public, user_id=user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.post("/{document_id}/ingest", response_model=DocumentIngestResponse)
