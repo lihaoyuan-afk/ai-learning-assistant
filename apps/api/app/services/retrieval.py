@@ -49,9 +49,21 @@ def retrieve_context(document_id: str, query: str, limit: int = 5) -> list[Sourc
     return _rerank(query, candidates, limit)
 
 
-def retrieve_context_global(query: str, limit: int = 5) -> list[SourceChunk]:
-    """Retrieve from all documents (no document_id filter)."""
+def retrieve_context_global(
+    query: str, limit: int = 5, user_id: str | None = None
+) -> list[SourceChunk]:
+    """Retrieve from the user's documents (or all docs in demo mode)."""
     fetch_limit = limit * _RERANK_FETCH_MULTIPLIER if _BM25_AVAILABLE else limit
     query_vector = _emb.embed_text(query)
-    candidates = vector_store.search_global(query_vector=query_vector, limit=fetch_limit)
+
+    document_ids: list[str] | None = None
+    if user_id is not None:
+        from app.services.document_store import list_documents
+        document_ids = [d.id for d in list_documents(user_id=user_id)]
+        if not document_ids:
+            return []
+
+    candidates = vector_store.search_global(
+        query_vector=query_vector, limit=fetch_limit, document_ids=document_ids
+    )
     return _rerank(query, candidates, limit)

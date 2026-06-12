@@ -4,7 +4,7 @@ from uuid import UUID
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance, FieldCondition, Filter, FilterSelector,
-    KeywordIndexParams, MatchValue, PayloadSchemaType, PointStruct, VectorParams,
+    KeywordIndexParams, MatchAny, MatchValue, PayloadSchemaType, PointStruct, VectorParams,
 )
 
 from app.core.config import settings
@@ -95,13 +95,24 @@ class VectorStore:
             for hit in response.points
         ]
 
-    def search_global(self, query_vector: list[float], limit: int = 5) -> list[SourceChunk]:
-        """Search across all documents (no document_id filter)."""
+    def search_global(
+        self,
+        query_vector: list[float],
+        limit: int = 5,
+        document_ids: list[str] | None = None,
+    ) -> list[SourceChunk]:
+        """Search across documents. Optionally restrict to a list of document_ids."""
         client = self._get_client()
         self._ensure_collection(client)
+        query_filter = None
+        if document_ids is not None:
+            query_filter = Filter(
+                must=[FieldCondition(key="document_id", match=MatchAny(any=document_ids))]
+            )
         response = client.query_points(
             collection_name=settings.qdrant_collection,
             query=query_vector,
+            query_filter=query_filter,
             limit=limit,
             with_payload=True,
         )

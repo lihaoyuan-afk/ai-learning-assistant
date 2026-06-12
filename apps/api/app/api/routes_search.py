@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.api.deps import CurrentUserID
 from app.services import llm as _llm
 from app.services import retrieval as _retrieval
 
@@ -16,8 +17,8 @@ class SearchRequest(BaseModel):
 
 
 @router.post("/stream")
-def stream_global_search(request: SearchRequest) -> StreamingResponse:
-    chunks = _retrieval.retrieve_context_global(request.question)
+def stream_global_search(request: SearchRequest, user_id: CurrentUserID) -> StreamingResponse:
+    chunks = _retrieval.retrieve_context_global(request.question, user_id=user_id)
 
     def _events():
         sources_payload = [c.model_dump() for c in chunks]
