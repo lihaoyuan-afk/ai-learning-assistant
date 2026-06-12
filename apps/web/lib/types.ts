@@ -137,3 +137,47 @@ export type StudyPlan = {
   generated_at: string;
 };
 
+export type ErrorEntry = {
+  question_id: string;
+  quiz_id: string;
+  document_id: string;
+  knowledge_point: string;
+  question_text: string;
+  options: string[];
+  correct_answer: string;
+  explanation: string;
+  mistake_count: number;
+  last_wrong_at?: string | null;
+};
+
+export type ErrorGroup = {
+  knowledge_point: string;
+  mistake_count: number;
+  mastery_score?: number | null;
+  entries: ErrorEntry[];
+};
+
+export type ErrorNotebookResponse = {
+  groups: ErrorGroup[];
+  total_mistakes: number;
+};
+
+export type KnowledgeNode = {
+  id: string;
+  label: string;
+  type: string;
+};
+
+export type KnowledgeEdge = {
+  source: string;
+  target: string;
+  label: string;
+};
+
+export type KnowledgeGraph = {
+  document_id: string;
+  nodes: KnowledgeNode[];
+  edges: KnowledgeEdge[];
+  error?: string;
+};
+

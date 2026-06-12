@@ -38,3 +38,30 @@ class ReviewItem(BaseModel):
 class ReviewResponse(BaseModel):
     items: list[ReviewItem]
     total: int
+
+
+# ── error notebook ────────────────────────────────────────────────────────────
+
+class ErrorEntry(BaseModel):
+    question_id: str
+    quiz_id: str
+    document_id: str
+    knowledge_point: str
+    question_text: str
+    options: list[str] = []
+    correct_answer: str
+    explanation: str
+    mistake_count: int
+    last_wrong_at: datetime | None = None
+
+
+class ErrorGroup(BaseModel):
+    knowledge_point: str
+    mistake_count: int
+    mastery_score: int | None = None
+    entries: list[ErrorEntry] = []
+
+
+class ErrorNotebookResponse(BaseModel):
+    groups: list[ErrorGroup]
+    total_mistakes: int

@@ -32,13 +32,13 @@ def test_upload_returns_ready_status(client, valid_pdf_bytes):
     assert _wait_for_final_status(client, doc_id) == "ready"
 
 
-def test_upload_non_pdf_rejected(client):
+def test_upload_unsupported_type_rejected(client):
     response = client.post(
         "/documents/upload",
-        files={"file": ("notes.txt", b"hello world", "text/plain")},
+        files={"file": ("data.csv", b"a,b,c\n1,2,3", "text/csv")},
     )
     assert response.status_code == 400
-    assert "PDF" in response.json()["detail"]
+    assert "Unsupported" in response.json()["detail"]
 
 
 def test_upload_empty_file_rejected(client):

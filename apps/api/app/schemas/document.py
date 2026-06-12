@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl
 
 
 class DocumentStatus(str, Enum):
@@ -38,4 +38,8 @@ class DocumentListResponse(BaseModel):
 class DocumentIngestResponse(BaseModel):
     document: DocumentRead
     message: str
+
+
+class ImportUrlRequest(BaseModel):
+    url: HttpUrl
 

@@ -6,11 +6,28 @@ from fastapi import UploadFile
 from app.core.config import settings
 from app.schemas.document import DocumentRead, DocumentStatus
 from app.services.chunker import chunk_document
-from app.services.document_parser import parse_pdf_bytes
+from app.services.document_parser import (
+    DocumentParseError,
+    parse_pdf_bytes,
+    parse_text_bytes,
+    parse_url,
+    parse_youtube_url,
+)
 from app.services.document_store import create_document, get_document, save_chunks, update_document_status
 from app.services.vector_store import vector_store
 
 _MAX_FILENAME_STEM = 40
+_TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
+_YOUTUBE_HOSTS = {"youtube.com", "youtu.be", "www.youtube.com", "m.youtube.com",
+                  "bilibili.com", "www.bilibili.com", "m.bilibili.com"}
+
+
+def _is_video_url(url: str) -> bool:
+    try:
+        from urllib.parse import urlparse
+        return urlparse(url).hostname in _YOUTUBE_HOSTS
+    except Exception:
+        return False
 
 
 async def save_uploaded_document(file: UploadFile) -> tuple[DocumentRead, bytes]:
@@ -18,8 +35,11 @@ async def save_uploaded_document(file: UploadFile) -> tuple[DocumentRead, bytes]
     filename = file.filename or "uploaded.pdf"
     suffix = Path(filename).suffix.lower()
 
-    if suffix != ".pdf":
-        raise ValueError("Only PDF files are accepted.")
+    allowed = {".pdf"} | _TEXT_SUFFIXES
+    if suffix not in allowed:
+        raise ValueError(
+            f"Unsupported file type '{suffix}'. Accepted: PDF, TXT, MD."
+        )
 
     contents = await file.read()
 
@@ -33,20 +53,26 @@ async def save_uploaded_document(file: UploadFile) -> tuple[DocumentRead, bytes]
             f"({len(contents) // (1024 * 1024)} MB received)."
         )
 
-    # Best-effort disk save (works in local dev; silently skipped on ephemeral hosts)
+    # Best-effort disk save
     file_path: str | None = None
     try:
         settings.upload_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(filename).stem[:_MAX_FILENAME_STEM]
-        safe_name = f"{stem}-{uuid4().hex[:8]}.pdf"
+        safe_name = f"{stem}-{uuid4().hex[:8]}{suffix}"
         destination = settings.upload_dir / safe_name
         destination.write_bytes(contents)
         file_path = str(destination)
     except Exception:
         pass
 
-    document = create_document(title=filename, file_type="pdf", file_path=file_path)
+    file_type = "pdf" if suffix == ".pdf" else "text"
+    document = create_document(title=filename, file_type=file_type, file_path=file_path)
     return document, contents
+
+
+def create_url_document(url: str) -> DocumentRead:
+    """Create a document record for a URL import (title resolved later)."""
+    return create_document(title=url[:120], file_type="url", file_path=None)
 
 
 def ingest_document(document_id: str, contents: bytes | None = None) -> DocumentRead:
@@ -66,11 +92,43 @@ def ingest_document(document_id: str, contents: bytes | None = None) -> Document
 
     update_document_status(document_id, DocumentStatus.processing)
     try:
-        parsed = parse_pdf_bytes(title=document.title, contents=contents)
+        if document.file_type == "text":
+            parsed = parse_text_bytes(title=document.title, contents=contents)
+        else:
+            parsed = parse_pdf_bytes(title=document.title, contents=contents)
         chunks = chunk_document(document_id=document_id, parsed=parsed)
         save_chunks(document_id, chunks)
         vector_store.upsert_chunks(chunks)
         return update_document_status(document_id, DocumentStatus.ready)
+    except Exception:
+        update_document_status(document_id, DocumentStatus.failed)
+        raise
+
+
+def ingest_url(document_id: str, url: str) -> DocumentRead:
+    """Fetch a URL (or video), parse content, and vectorize."""
+    document = get_document(document_id)
+    if document is None:
+        raise ValueError(f"Unknown document: {document_id}")
+
+    update_document_status(document_id, DocumentStatus.processing)
+    try:
+        if _is_video_url(url):
+            parsed = parse_youtube_url(url)
+        else:
+            parsed = parse_url(url)
+
+        # Update title from actual page title
+        from app.services.document_store import update_document_title
+        update_document_title(document_id, parsed.title)
+
+        chunks = chunk_document(document_id=document_id, parsed=parsed)
+        save_chunks(document_id, chunks)
+        vector_store.upsert_chunks(chunks)
+        return update_document_status(document_id, DocumentStatus.ready)
+    except DocumentParseError:
+        update_document_status(document_id, DocumentStatus.failed)
+        raise
     except Exception:
         update_document_status(document_id, DocumentStatus.failed)
         raise

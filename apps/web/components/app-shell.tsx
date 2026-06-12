@@ -7,9 +7,10 @@ import type { ReactNode } from "react";
 const navItems = [
   { href: "/", label: "工作台" },
   { href: "/documents", label: "资料" },
-  { href: "/documents/upload", label: "上传" },
+  { href: "/documents/upload", label: "导入资料" },
   { href: "/search", label: "全局搜索" },
   { href: "/review", label: "复习" },
+  { href: "/error-notebook", label: "错题本" },
   { href: "/profile", label: "画像" },
 ];
 

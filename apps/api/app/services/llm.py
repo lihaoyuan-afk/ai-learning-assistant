@@ -215,6 +215,51 @@ _DECIDE_TOOLS = [
 ]
 
 
+def stream_socratic(
+    chunks: list[SourceChunk],
+    history: list[dict],
+    user_answer: str | None = None,
+    topic: str | None = None,
+) -> Generator[str, None, None]:
+    """Generate a Socratic follow-up question or opening question via streaming.
+
+    On first call (user_answer=None): generate an opening conceptual question.
+    On subsequent calls: evaluate the user's answer and ask the next question.
+    """
+    if not chunks:
+        yield "未检索到相关文档片段，无法开始苏格拉底对话。"
+        return
+
+    context = "\n\n".join(
+        f"[第{c.page_number or '?'}页] {c.content}" for c in chunks[:6]
+    )
+    system_prompt = (
+        "你是一位苏格拉底式导师。你的目标不是直接告诉学生答案，而是通过一连串启发性问题，"
+        "引导学生自己发现知识。\n\n"
+        "规则：\n"
+        "1. 每次只提一个问题，不要一次问多个。\n"
+        "2. 如果学生的回答正确，先简短肯定，再深化到下一层问题。\n"
+        "3. 如果学生的回答错误或不完整，不要直接纠正，而是通过反问或类比引导思考。\n"
+        "4. 问题要基于文档内容，不要编造文档之外的内容。\n"
+        "5. 问题难度循序渐进：先从基本概念，再到应用，再到批判性思考。\n"
+        f"\n文档片段：\n{context}"
+    )
+
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    messages.extend(history)
+
+    if user_answer is None:
+        topic_hint = f"请围绕主题「{topic}」" if topic else "请"
+        messages.append({
+            "role": "user",
+            "content": f"{topic_hint}提出第一个启发性问题，从最基础的概念入手。",
+        })
+    else:
+        messages.append({"role": "user", "content": user_answer})
+
+    yield from stream_chat(messages, max_tokens=600)
+
+
 def decide_retrieval(question: str) -> tuple[bool, str]:
     """Use LLM tool calling to decide if retrieval is needed.
 

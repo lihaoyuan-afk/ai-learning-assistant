@@ -3,6 +3,8 @@ import type {
   DocumentIngestResponse,
   DocumentListResponse,
   DocumentRead,
+  ErrorNotebookResponse,
+  KnowledgeGraph,
   MasteryResponse,
   QuizAttemptRequest,
   QuizAttemptResponse,
@@ -136,6 +138,32 @@ export async function deleteDocument(documentId: string): Promise<void> {
   await request<{ message: string }>(`/documents/${documentId}`, {
     method: "DELETE",
   });
+}
+
+export async function importDocumentFromUrl(url: string): Promise<DocumentIngestResponse> {
+  return request<DocumentIngestResponse>("/documents/import-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function getErrorNotebook(): Promise<ErrorNotebookResponse> {
+  return request<ErrorNotebookResponse>("/profile/error-notebook");
+}
+
+export async function getKnowledgeGraph(documentId: string): Promise<KnowledgeGraph> {
+  return request<KnowledgeGraph>(`/documents/${documentId}/knowledge-graph`);
+}
+
+export async function* streamSocratic(
+  documentId: string,
+  payload: { user_answer?: string; history?: HistoryMessage[]; topic?: string }
+): AsyncGenerator<StreamEvent> {
+  yield* _streamSse(
+    `${API_BASE_URL}/documents/${documentId}/chat/socratic/stream`,
+    payload
+  );
 }
 
 export type StreamEvent =

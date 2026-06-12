@@ -69,6 +69,13 @@ def get_document(document_id: str) -> DocumentRead | None:
         return _doc_to_read(doc) if doc else None
 
 
+def update_document_title(document_id: str, title: str) -> None:
+    with _db.db_session() as db:
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if doc:
+            doc.title = title
+
+
 def update_document_status(document_id: str, status: DocumentStatus) -> DocumentRead:
     with _db.db_session() as db:
         doc = db.query(Document).filter(Document.id == document_id).first()

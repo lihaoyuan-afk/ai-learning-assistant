@@ -18,6 +18,8 @@ const featureLinks = [
   { href: "chat", title: "问答", body: "基于文档内容检索并回答问题，附来源页码。" },
   { href: "summary", title: "总结", body: "生成结构化学习总结。" },
   { href: "quiz", title: "Quiz", body: "生成不重复的自测题目。" },
+  { href: "socratic", title: "苏格拉底对话", body: "AI 主动提问，引导深入理解文档内容。" },
+  { href: "knowledge-graph", title: "知识图谱", body: "可视化展示文档中的概念和关系网络。" },
 ];
 
 export default function DocumentDetailPage() {
