@@ -42,6 +42,7 @@ htmlcov/
 quiz_*.json
 quiz_*.txt
 e2e_result.json
+test_result.json
 mc_raw_output.txt
 *.pdf
 logs/
