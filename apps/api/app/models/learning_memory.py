@@ -10,7 +10,8 @@ class LearningMemory(Base):
     __tablename__ = "learning_memory"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    knowledge_point: Mapped[str] = mapped_column(String, index=True, unique=True)
+    user_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    knowledge_point: Mapped[str] = mapped_column(String, index=True)
     mastery_score: Mapped[int] = mapped_column(Integer, default=0)
     correct_count: Mapped[int] = mapped_column(Integer, default=0)
     mistake_count: Mapped[int] = mapped_column(Integer, default=0)

@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # Demo auth — if set, all API routes require Authorization: Bearer <password>
     demo_password: str | None = None
 
+    # JWT auth
+    jwt_secret: str = "dev-secret-please-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_days: int = 30
+
     # CORS — comma-separated origins accepted in env var
     cors_origins: list[str] = ["http://localhost:3000", "http://10.140.178.184:3000"]
 

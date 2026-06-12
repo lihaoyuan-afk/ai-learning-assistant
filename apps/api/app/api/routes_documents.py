@@ -1,6 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.api.deps import CurrentUserID
 from app.schemas.document import DocumentIngestResponse, DocumentListResponse, DocumentRead, ImportUrlRequest
 from app.services.document_parser import DocumentParseError
 from app.services.document_store import delete_document, get_document, list_documents
@@ -31,10 +32,11 @@ def _run_ingest_url(document_id: str, url: str) -> None:
 @router.post("/upload", response_model=DocumentIngestResponse)
 async def upload_document(
     background_tasks: BackgroundTasks,
+    user_id: CurrentUserID,
     file: UploadFile = File(...),
 ) -> DocumentIngestResponse:
     try:
-        document, contents = await save_uploaded_document(file)
+        document, contents = await save_uploaded_document(file, user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -49,9 +51,10 @@ async def upload_document(
 def import_url_document(
     request: ImportUrlRequest,
     background_tasks: BackgroundTasks,
+    user_id: CurrentUserID,
 ) -> DocumentIngestResponse:
     url = str(request.url)
-    document = create_url_document(url)
+    document = create_url_document(url, user_id=user_id)
     background_tasks.add_task(_run_ingest_url, document.id, url)
     return DocumentIngestResponse(
         document=document,
@@ -60,25 +63,25 @@ def import_url_document(
 
 
 @router.get("", response_model=DocumentListResponse)
-def read_documents() -> DocumentListResponse:
-    return DocumentListResponse(documents=list_documents())
+def read_documents(user_id: CurrentUserID) -> DocumentListResponse:
+    return DocumentListResponse(documents=list_documents(user_id=user_id))
 
 
 @router.get("/{document_id}", response_model=DocumentRead)
-def read_document(document_id: str) -> DocumentRead:
-    document = get_document(document_id)
+def read_document(document_id: str, user_id: CurrentUserID) -> DocumentRead:
+    document = get_document(document_id, user_id=user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return document
 
 
 @router.delete("/{document_id}")
-def remove_document(document_id: str) -> JSONResponse:
-    document = get_document(document_id)
+def remove_document(document_id: str, user_id: CurrentUserID) -> JSONResponse:
+    document = get_document(document_id, user_id=user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     try:
-        delete_document(document_id)
+        delete_document(document_id, user_id=user_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Delete failed: {exc}") from exc
     return JSONResponse(content={"message": "Document deleted."})
@@ -88,8 +91,9 @@ def remove_document(document_id: str) -> JSONResponse:
 def ingest_existing_document(
     document_id: str,
     background_tasks: BackgroundTasks,
+    user_id: CurrentUserID,
 ) -> DocumentIngestResponse:
-    document = get_document(document_id)
+    document = get_document(document_id, user_id=user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     background_tasks.add_task(_run_ingest, document.id)
@@ -97,8 +101,8 @@ def ingest_existing_document(
 
 
 @router.get("/{document_id}/knowledge-graph")
-def get_knowledge_graph(document_id: str) -> dict:
-    document = get_document(document_id)
+def get_knowledge_graph(document_id: str, user_id: CurrentUserID) -> dict:
+    document = get_document(document_id, user_id=user_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
     if document.status != "ready":

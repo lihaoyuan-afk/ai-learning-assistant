@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.agents.graph import quiz_graph
+from app.api.deps import CurrentUserID
 from app.schemas.quiz import (
     QuizAttemptRequest, QuizAttemptResponse, QuizListResponse,
     QuizRequest, QuizResponse,
@@ -17,8 +18,8 @@ router = APIRouter(prefix="/documents/{document_id}/quiz", tags=["quiz"])
 
 
 @router.post("", response_model=QuizResponse)
-def create_quiz(document_id: str, request: QuizRequest) -> QuizResponse:
-    doc = get_document(document_id)
+def create_quiz(document_id: str, request: QuizRequest, user_id: CurrentUserID) -> QuizResponse:
+    doc = get_document(document_id, user_id=user_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc.status != "ready":
@@ -48,14 +49,16 @@ def create_quiz(document_id: str, request: QuizRequest) -> QuizResponse:
 
 
 @router.get("", response_model=QuizListResponse)
-def list_document_quizzes(document_id: str) -> QuizListResponse:
-    if get_document(document_id) is None:
+def list_document_quizzes(document_id: str, user_id: CurrentUserID) -> QuizListResponse:
+    if get_document(document_id, user_id=user_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return QuizListResponse(quizzes=list_quizzes(document_id))
 
 
 @router.get("/{quiz_id}", response_model=QuizResponse)
-def read_quiz(document_id: str, quiz_id: str) -> QuizResponse:
+def read_quiz(document_id: str, quiz_id: str, user_id: CurrentUserID) -> QuizResponse:
+    if get_document(document_id, user_id=user_id) is None:
+        raise HTTPException(status_code=404, detail="Document not found")
     quiz = get_quiz(document_id=document_id, quiz_id=quiz_id)
     if quiz is None:
         raise HTTPException(status_code=404, detail="Quiz not found")
@@ -64,11 +67,11 @@ def read_quiz(document_id: str, quiz_id: str) -> QuizResponse:
 
 @router.post("/{quiz_id}/attempt", response_model=QuizAttemptResponse)
 def submit_attempt(
-    document_id: str, quiz_id: str, request: QuizAttemptRequest
+    document_id: str, quiz_id: str, request: QuizAttemptRequest, user_id: CurrentUserID
 ) -> QuizAttemptResponse:
-    if get_document(document_id) is None:
+    if get_document(document_id, user_id=user_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
     try:
-        return score_and_save_attempt(document_id, quiz_id, request)
+        return score_and_save_attempt(document_id, quiz_id, request, user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

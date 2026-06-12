@@ -1,36 +1,24 @@
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Security
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.api import routes_chat, routes_documents, routes_profile, routes_quiz, routes_search, routes_summary
+from app.api import routes_auth, routes_chat, routes_documents, routes_profile, routes_quiz, routes_search, routes_summary
+from app.api.deps import CurrentUserID, _resolve_user_id  # noqa: F401 — re-exported for convenience
 from app.core.config import settings
-
-_bearer = HTTPBearer(auto_error=False)
-
-
-async def _verify_demo(
-    credentials: HTTPAuthorizationCredentials | None = Security(_bearer),
-) -> None:
-    """Require Authorization: Bearer <DEMO_PASSWORD> when DEMO_PASSWORD is set."""
-    if not settings.demo_password:
-        return
-    if credentials is None or credentials.credentials != settings.demo_password:
-        raise HTTPException(status_code=401, detail="请输入访问密码")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.db.session import create_tables, db_session
+    from app.db.session import create_tables, db_session, engine
+    from app.models import document, learning_memory, user  # ensure all models imported
     from app.models.document import Document
     from app.schemas.document import DocumentStatus
 
     create_tables()
+    _run_column_migrations(engine)
 
-    # Any document stuck in uploaded/processing means the previous process was
-    # killed while a background task was running.  Mark them failed so the user
-    # can re-upload rather than waiting forever.
+    # Reset stuck documents
     with db_session() as db:
         stuck = (
             db.query(Document)
@@ -41,6 +29,21 @@ async def lifespan(app: FastAPI):
             doc.status = DocumentStatus.failed.value
 
     yield
+
+
+def _run_column_migrations(engine) -> None:
+    """Add columns that were introduced after the initial DB creation."""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for table, column, col_def in [
+            ("documents", "user_id", "TEXT"),
+            ("learning_memory", "user_id", "TEXT"),
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}"))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
 
 
 def create_app() -> FastAPI:
@@ -59,7 +62,12 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
 
-    _auth = [Depends(_verify_demo)]
+    # Auth routes are PUBLIC (no auth required)
+    app.include_router(routes_auth.router)
+
+    # All other routes require auth (JWT or demo password)
+    from app.api.deps import _resolve_user_id as _ruid
+    _auth = [Depends(_ruid)]
     app.include_router(routes_documents.router, dependencies=_auth)
     app.include_router(routes_chat.router, dependencies=_auth)
     app.include_router(routes_summary.router, dependencies=_auth)

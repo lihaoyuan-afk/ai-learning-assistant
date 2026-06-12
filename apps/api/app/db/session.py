@@ -25,7 +25,7 @@ _is_sqlite = "sqlite" in _url
 _connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
 engine = create_engine(_url, connect_args=_connect_args, pool_pre_ping=not _is_sqlite)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
 
 
 @contextmanager

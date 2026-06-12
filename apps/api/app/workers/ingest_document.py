@@ -30,7 +30,9 @@ def _is_video_url(url: str) -> bool:
         return False
 
 
-async def save_uploaded_document(file: UploadFile) -> tuple[DocumentRead, bytes]:
+async def save_uploaded_document(
+    file: UploadFile, user_id: str | None = None
+) -> tuple[DocumentRead, bytes]:
     """Validate, read bytes, create DB record. Returns (document, raw_bytes)."""
     filename = file.filename or "uploaded.pdf"
     suffix = Path(filename).suffix.lower()
@@ -66,13 +68,13 @@ async def save_uploaded_document(file: UploadFile) -> tuple[DocumentRead, bytes]
         pass
 
     file_type = "pdf" if suffix == ".pdf" else "text"
-    document = create_document(title=filename, file_type=file_type, file_path=file_path)
+    document = create_document(title=filename, file_type=file_type, file_path=file_path, user_id=user_id)
     return document, contents
 
 
-def create_url_document(url: str) -> DocumentRead:
+def create_url_document(url: str, user_id: str | None = None) -> DocumentRead:
     """Create a document record for a URL import (title resolved later)."""
-    return create_document(title=url[:120], file_type="url", file_path=None)
+    return create_document(title=url[:120], file_type="url", file_path=None, user_id=user_id)
 
 
 def ingest_document(document_id: str, contents: bytes | None = None) -> DocumentRead:

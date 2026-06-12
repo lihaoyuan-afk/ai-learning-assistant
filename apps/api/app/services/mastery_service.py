@@ -37,24 +37,24 @@ def _schedule_next_review(score: int, from_dt: datetime) -> datetime:
 def update_mastery_from_attempt(
     results: list[QuestionResult],
     questions: list[QuizQuestion],
+    user_id: str | None = None,
 ) -> None:
     q_map = {q.id: q for q in questions}
     now = _utcnow()
 
     for result in results:
         if result.requires_review:
-            continue  # short_answer — can't auto-grade
+            continue
         q = q_map.get(result.question_id)
         if q is None or not q.knowledge_point:
             continue
 
         kp = q.knowledge_point
         with _db.db_session() as db:
-            mem = (
-                db.query(LearningMemory)
-                .filter(LearningMemory.knowledge_point == kp)
-                .first()
-            )
+            query = db.query(LearningMemory).filter(LearningMemory.knowledge_point == kp)
+            if user_id is not None:
+                query = query.filter(LearningMemory.user_id == user_id)
+            mem = query.first()
             if mem is None:
                 mem = LearningMemory(
                     id=uuid4().hex,
@@ -62,6 +62,7 @@ def update_mastery_from_attempt(
                     mastery_score=_INITIAL_SCORE,
                     correct_count=0,
                     mistake_count=0,
+                    user_id=user_id,
                 )
                 db.add(mem)
 
@@ -76,13 +77,12 @@ def update_mastery_from_attempt(
             mem.next_review_at = _schedule_next_review(mem.mastery_score, now)
 
 
-def get_mastery() -> MasteryResponse:
+def get_mastery(user_id: str | None = None) -> MasteryResponse:
     with _db.db_session() as db:
-        rows = (
-            db.query(LearningMemory)
-            .order_by(LearningMemory.mastery_score)
-            .all()
-        )
+        q = db.query(LearningMemory)
+        if user_id is not None:
+            q = q.filter(LearningMemory.user_id == user_id)
+        rows = q.order_by(LearningMemory.mastery_score).all()
         items = [
             MasteryItem(
                 knowledge_point=r.knowledge_point,
@@ -99,16 +99,15 @@ def get_mastery() -> MasteryResponse:
     return MasteryResponse(items=items, total=total, average_score=avg)
 
 
-def schedule_review_soon(knowledge_point: str, days: int = 3) -> None:
-    """Schedule a knowledge point for review `days` from now (min existing score kept)."""
+def schedule_review_soon(knowledge_point: str, days: int = 3, user_id: str | None = None) -> None:
+    """Schedule a knowledge point for review `days` from now."""
     now = _utcnow()
     target = now + timedelta(days=days)
     with _db.db_session() as db:
-        mem = (
-            db.query(LearningMemory)
-            .filter(LearningMemory.knowledge_point == knowledge_point)
-            .first()
-        )
+        query = db.query(LearningMemory).filter(LearningMemory.knowledge_point == knowledge_point)
+        if user_id is not None:
+            query = query.filter(LearningMemory.user_id == user_id)
+        mem = query.first()
         if mem is None:
             mem = LearningMemory(
                 id=uuid4().hex,
@@ -116,23 +115,25 @@ def schedule_review_soon(knowledge_point: str, days: int = 3) -> None:
                 mastery_score=_INITIAL_SCORE,
                 correct_count=0,
                 mistake_count=0,
+                user_id=user_id,
             )
             db.add(mem)
         mem.next_review_at = target
 
 
-def get_review_today() -> ReviewResponse:
+def get_review_today(user_id: str | None = None) -> ReviewResponse:
     from app.models.quiz import QuizQuestion as QuizQuestionModel  # avoid circular import
 
     now = _utcnow()
     with _db.db_session() as db:
-        due = (
+        q = (
             db.query(LearningMemory)
             .filter(LearningMemory.next_review_at.isnot(None))
             .filter(LearningMemory.next_review_at <= now)
-            .order_by(LearningMemory.mastery_score)
-            .all()
         )
+        if user_id is not None:
+            q = q.filter(LearningMemory.user_id == user_id)
+        due = q.order_by(LearningMemory.mastery_score).all()
         items: list[ReviewItem] = []
         for mem in due:
             qs = (

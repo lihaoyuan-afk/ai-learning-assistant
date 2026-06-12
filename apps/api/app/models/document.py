@@ -10,6 +10,7 @@ class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     title: Mapped[str] = mapped_column(String)
     file_type: Mapped[str] = mapped_column(String)
     file_path: Mapped[str | None] = mapped_column(String, nullable=True)

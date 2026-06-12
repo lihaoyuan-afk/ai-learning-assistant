@@ -181,6 +181,17 @@ export type KnowledgeGraph = {
   error?: string;
 };
 
+export type UserRead = {
+  id: string;
+  email: string;
+  created_at: string;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+};
+
 export type WeeklyReport = {
   period_days: number;
   documents_added: number;

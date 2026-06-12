@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.api.deps import CurrentUserID
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.document import SourceChunk
 from app.services.document_store import get_document
@@ -20,8 +21,8 @@ class SocraticRequest(BaseModel):
 
 
 @router.post("", response_model=ChatResponse)
-def chat_with_document(document_id: str, request: ChatRequest) -> ChatResponse:
-    doc = get_document(document_id)
+def chat_with_document(document_id: str, request: ChatRequest, user_id: CurrentUserID) -> ChatResponse:
+    doc = get_document(document_id, user_id=user_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc.status != "ready":
@@ -39,8 +40,8 @@ def chat_with_document(document_id: str, request: ChatRequest) -> ChatResponse:
 
 
 @router.post("/stream")
-def stream_chat_with_document(document_id: str, request: ChatRequest) -> StreamingResponse:
-    doc = get_document(document_id)
+def stream_chat_with_document(document_id: str, request: ChatRequest, user_id: CurrentUserID) -> StreamingResponse:
+    doc = get_document(document_id, user_id=user_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc.status != "ready":
@@ -69,8 +70,8 @@ def stream_chat_with_document(document_id: str, request: ChatRequest) -> Streami
 
 
 @router.post("/socratic/stream")
-def socratic_stream(document_id: str, request: SocraticRequest) -> StreamingResponse:
-    doc = get_document(document_id)
+def socratic_stream(document_id: str, request: SocraticRequest, user_id: CurrentUserID) -> StreamingResponse:
+    doc = get_document(document_id, user_id=user_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc.status != "ready":

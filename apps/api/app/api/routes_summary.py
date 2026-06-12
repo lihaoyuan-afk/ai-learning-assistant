@@ -1,9 +1,12 @@
 import json
 
+import json
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.agents.graph import summary_graph
+from app.api.deps import CurrentUserID
 from app.schemas.summary import SummaryResponse
 from app.services.document_store import get_chunks, get_document, save_summary
 
@@ -11,8 +14,8 @@ router = APIRouter(prefix="/documents/{document_id}/summary", tags=["summary"])
 
 
 @router.post("", response_model=SummaryResponse)
-def summarize_document(document_id: str) -> SummaryResponse:
-    doc = get_document(document_id)
+def summarize_document(document_id: str, user_id: CurrentUserID) -> SummaryResponse:
+    doc = get_document(document_id, user_id=user_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc.status != "ready":
@@ -41,8 +44,8 @@ def summarize_document(document_id: str) -> SummaryResponse:
 
 
 @router.post("/stream")
-def stream_summary_document(document_id: str) -> StreamingResponse:
-    doc = get_document(document_id)
+def stream_summary_document(document_id: str, user_id: CurrentUserID) -> StreamingResponse:
+    doc = get_document(document_id, user_id=user_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
     if doc.status != "ready":

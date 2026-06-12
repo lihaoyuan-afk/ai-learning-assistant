@@ -43,7 +43,9 @@ def _row_to_question(q: QuizQuestionModel) -> QuizQuestion:
 
 # ── documents ─────────────────────────────────────────────────────────────────
 
-def create_document(title: str, file_type: str, file_path: str) -> DocumentRead:
+def create_document(
+    title: str, file_type: str, file_path: str | None, user_id: str | None = None
+) -> DocumentRead:
     with _db.db_session() as db:
         doc = Document(
             id=uuid4().hex,
@@ -51,21 +53,28 @@ def create_document(title: str, file_type: str, file_path: str) -> DocumentRead:
             file_type=file_type,
             file_path=file_path,
             status=DocumentStatus.uploaded.value,
+            user_id=user_id,
         )
         db.add(doc)
         db.flush()
         return _doc_to_read(doc)
 
 
-def list_documents() -> list[DocumentRead]:
+def list_documents(user_id: str | None = None) -> list[DocumentRead]:
     with _db.db_session() as db:
-        rows = db.query(Document).order_by(Document.created_at.desc()).all()
+        q = db.query(Document)
+        if user_id is not None:
+            q = q.filter(Document.user_id == user_id)
+        rows = q.order_by(Document.created_at.desc()).all()
         return [_doc_to_read(r) for r in rows]
 
 
-def get_document(document_id: str) -> DocumentRead | None:
+def get_document(document_id: str, user_id: str | None = None) -> DocumentRead | None:
     with _db.db_session() as db:
-        doc = db.query(Document).filter(Document.id == document_id).first()
+        q = db.query(Document).filter(Document.id == document_id)
+        if user_id is not None:
+            q = q.filter(Document.user_id == user_id)
+        doc = q.first()
         return _doc_to_read(doc) if doc else None
 
 
@@ -86,14 +95,17 @@ def update_document_status(document_id: str, status: DocumentStatus) -> Document
         return _doc_to_read(doc)
 
 
-def delete_document(document_id: str) -> None:
+def delete_document(document_id: str, user_id: str | None = None) -> None:
     """Delete document and all associated DB records, Qdrant vectors, and disk file."""
     from pathlib import Path
 
     from app.services.vector_store import vector_store
 
     with _db.db_session() as db:
-        doc = db.query(Document).filter(Document.id == document_id).first()
+        q = db.query(Document).filter(Document.id == document_id)
+        if user_id is not None:
+            q = q.filter(Document.user_id == user_id)
+        doc = q.first()
         if doc is None:
             raise ValueError(f"Document not found: {document_id}")
         file_path = doc.file_path
@@ -194,7 +206,7 @@ def save_quiz(document_id: str, quiz: QuizResponse) -> None:
 # ── quiz attempts ─────────────────────────────────────────────────────────────
 
 def score_and_save_attempt(
-    document_id: str, quiz_id: str, request: QuizAttemptRequest
+    document_id: str, quiz_id: str, request: QuizAttemptRequest, user_id: str | None = None
 ) -> QuizAttemptResponse:
     quiz = get_quiz(document_id, quiz_id)
     if quiz is None:
@@ -245,9 +257,8 @@ def score_and_save_attempt(
             answers=json.dumps(request.answers, ensure_ascii=False),
         ))
 
-    # Update knowledge-point mastery scores based on this attempt
     import app.services.mastery_service as _mastery  # lazy to avoid circular at load time
-    _mastery.update_mastery_from_attempt(results, quiz.questions)
+    _mastery.update_mastery_from_attempt(results, quiz.questions, user_id=user_id)
 
     return attempt
 

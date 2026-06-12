@@ -13,34 +13,38 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def generate_weekly_report(period_days: int = 7) -> WeeklyReport:
+def generate_weekly_report(period_days: int = 7, user_id: str | None = None) -> WeeklyReport:
     now = _utcnow()
     since = now - timedelta(days=period_days)
     generated_at = now.isoformat()
 
     with _db.db_session() as db:
-        docs_added = db.query(Document).filter(Document.created_at >= since).count()
+        doc_q = db.query(Document).filter(Document.created_at >= since)
+        if user_id is not None:
+            doc_q = doc_q.filter(Document.user_id == user_id)
+        docs_added = doc_q.count()
 
-        quiz_ids_recent = [
-            r[0] for r in
-            db.query(Quiz.id).filter(Quiz.created_at >= since).all()
-        ]
+        quiz_q = db.query(Quiz.id)
+        if user_id is not None:
+            doc_ids = [r.id for r in db.query(Document.id).filter(Document.user_id == user_id).all()]
+            quiz_q = quiz_q.filter(Quiz.document_id.in_(doc_ids))
+        quiz_q = quiz_q.filter(Quiz.created_at >= since)
+        quiz_ids_recent = [r[0] for r in quiz_q.all()]
         quizzes_taken = len(quiz_ids_recent)
 
-        attempts = (
-            db.query(QuizAttempt)
-            .filter(QuizAttempt.created_at >= since)
-            .all()
-        )
+        attempt_q = db.query(QuizAttempt).filter(QuizAttempt.created_at >= since)
+        if quiz_ids_recent:
+            attempt_q = attempt_q.filter(QuizAttempt.quiz_id.in_(quiz_ids_recent))
+        elif user_id is not None:
+            attempt_q = attempt_q.filter(False)  # no quizzes → no attempts
+        attempts = attempt_q.all()
         questions_answered = sum(a.total for a in attempts)
         correct_answers = sum(a.score for a in attempts)
 
-        mastery_rows = (
-            db.query(LearningMemory)
-            .order_by(LearningMemory.mastery_score)
-            .all()
-        )
-        # Snapshot while in session
+        mastery_q = db.query(LearningMemory)
+        if user_id is not None:
+            mastery_q = mastery_q.filter(LearningMemory.user_id == user_id)
+        mastery_rows = mastery_q.order_by(LearningMemory.mastery_score).all()
         mastery_data = [
             (r.knowledge_point, r.mastery_score) for r in mastery_rows
         ]

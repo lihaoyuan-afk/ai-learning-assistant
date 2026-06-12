@@ -26,7 +26,7 @@ def db_setup(monkeypatch):
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine, expire_on_commit=False)
     Base.metadata.create_all(bind=test_engine)
 
     @contextmanager

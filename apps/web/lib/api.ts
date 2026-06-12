@@ -13,6 +13,8 @@ import type {
   ReviewResponse,
   SummaryResponse,
   StudyPlan,
+  TokenResponse,
+  UserRead,
   WeeklyReport,
 } from "@/lib/types";
 
@@ -59,6 +61,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export async function loginUser(email: string, password: string): Promise<TokenResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `登录失败（${res.status}）`);
+  }
+  return res.json() as Promise<TokenResponse>;
+}
+
+export async function registerUser(email: string, password: string): Promise<TokenResponse> {
+  const res = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `注册失败（${res.status}）`);
+  }
+  return res.json() as Promise<TokenResponse>;
+}
+
+export async function getMe(): Promise<UserRead> {
+  return request<UserRead>("/auth/me");
 }
 
 export async function getDocuments(): Promise<DocumentListResponse> {

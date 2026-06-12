@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException
 
+from app.api.deps import CurrentUserID
 from app.schemas.plan import StudyPlan
 from app.schemas.profile import (
     ErrorEntry,
@@ -15,13 +16,13 @@ router = APIRouter(prefix="/profile", tags=["profile"])
 
 
 @router.get("/mastery", response_model=MasteryResponse)
-def read_mastery() -> MasteryResponse:
-    return get_mastery()
+def read_mastery(user_id: CurrentUserID) -> MasteryResponse:
+    return get_mastery(user_id=user_id)
 
 
 @router.get("/review/today", response_model=ReviewResponse)
-def read_review_today() -> ReviewResponse:
-    return get_review_today()
+def read_review_today(user_id: CurrentUserID) -> ReviewResponse:
+    return get_review_today(user_id=user_id)
 
 
 @router.post("/study-plan", response_model=StudyPlan)
@@ -31,9 +32,9 @@ def create_study_plan() -> StudyPlan:
 
 
 @router.get("/error-notebook", response_model=ErrorNotebookResponse)
-def read_error_notebook() -> ErrorNotebookResponse:
+def read_error_notebook(user_id: CurrentUserID) -> ErrorNotebookResponse:
     from app.services.error_notebook import get_error_notebook
-    raw_groups = get_error_notebook()
+    raw_groups = get_error_notebook(user_id=user_id)
     groups = [
         ErrorGroup(
             knowledge_point=g.knowledge_point,
@@ -64,14 +65,14 @@ def read_error_notebook() -> ErrorNotebookResponse:
 
 
 @router.post("/mastery/schedule-review")
-def schedule_review(knowledge_point: str = Body(..., embed=True)) -> dict:
-    schedule_review_soon(knowledge_point)
+def schedule_review(knowledge_point: str = Body(..., embed=True), user_id: CurrentUserID = None) -> dict:
+    schedule_review_soon(knowledge_point, user_id=user_id)
     return {"message": "已安排", "knowledge_point": knowledge_point}
 
 
 @router.get("/weekly-report", response_model=WeeklyReport)
-def get_weekly_report(days: int = 7) -> WeeklyReport:
+def get_weekly_report(days: int = 7, user_id: CurrentUserID = None) -> WeeklyReport:
     if days < 1 or days > 90:
         raise HTTPException(status_code=400, detail="days 必须在 1-90 之间")
     from app.services.report_service import generate_weekly_report
-    return generate_weekly_report(period_days=days)
+    return generate_weekly_report(period_days=days, user_id=user_id)

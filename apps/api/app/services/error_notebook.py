@@ -30,10 +30,26 @@ class ErrorGroup:
     entries: list[ErrorEntry] = field(default_factory=list)
 
 
-def get_error_notebook() -> list[ErrorGroup]:
+def get_error_notebook(user_id: str | None = None) -> list[ErrorGroup]:
     """Return all wrong MC answers grouped by knowledge_point, sorted by mistake count."""
+    from app.models.document import Document
     with _db.db_session() as db:
-        attempts = db.query(QuizAttempt).order_by(QuizAttempt.created_at).all()
+        if user_id is not None:
+            # Filter attempts via quiz → document → user_id
+            doc_ids = [
+                r.id for r in db.query(Document.id).filter(Document.user_id == user_id).all()
+            ]
+            quiz_ids_for_user = [
+                r.id for r in db.query(Quiz.id).filter(Quiz.document_id.in_(doc_ids)).all()
+            ]
+            attempts = (
+                db.query(QuizAttempt)
+                .filter(QuizAttempt.quiz_id.in_(quiz_ids_for_user))
+                .order_by(QuizAttempt.created_at)
+                .all()
+            )
+        else:
+            attempts = db.query(QuizAttempt).order_by(QuizAttempt.created_at).all()
         if not attempts:
             return []
 
