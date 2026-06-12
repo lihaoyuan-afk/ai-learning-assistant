@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_auth, routes_chat, routes_documents, routes_profile, routes_quiz, routes_search, routes_summary
+from app.api import routes_auth, routes_chat, routes_documents, routes_profile, routes_quiz, routes_search, routes_summary, routes_tts
 from app.api.deps import CurrentUserID, _resolve_user_id  # noqa: F401 — re-exported for convenience
 from app.core.config import settings
 
@@ -76,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_quiz.router, dependencies=_auth)
     app.include_router(routes_profile.router, dependencies=_auth)
     app.include_router(routes_search.router, dependencies=_auth)
+    app.include_router(routes_tts.router, dependencies=_auth)
     return app
 
 

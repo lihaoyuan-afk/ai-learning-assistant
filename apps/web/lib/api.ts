@@ -220,6 +220,23 @@ export async function getWeeklyReport(days = 7): Promise<WeeklyReport> {
   return request<WeeklyReport>(`/profile/weekly-report?days=${days}`);
 }
 
+export async function synthesizeSpeech(text: string): Promise<Blob> {
+  const token = getDemoToken();
+  const res = await fetch(`${API_BASE_URL}/tts`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.detail ?? `TTS 失败（${res.status}）`);
+  }
+  return res.blob();
+}
+
 export async function getKnowledgeGraph(documentId: string): Promise<KnowledgeGraph> {
   return request<KnowledgeGraph>(`/documents/${documentId}/knowledge-graph`);
 }

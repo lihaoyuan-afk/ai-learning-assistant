@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     qdrant_collection: str = "learning_chunks"
     qdrant_api_key: str | None = None
 
+    # TTS (Text-to-Speech) — requires an OpenAI-compatible TTS endpoint
+    tts_model: str = "tts-1"
+    tts_voice: str = "alloy"   # alloy | echo | fable | onyx | nova | shimmer
+
     # Demo auth — if set, all API routes require Authorization: Bearer <password>
     demo_password: str | None = None
 

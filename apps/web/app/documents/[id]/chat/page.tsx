@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { streamChat } from "@/lib/api";
 import type { HistoryMessage } from "@/lib/api";
 import type { SourceChunk } from "@/lib/types";
+import { TTSButton } from "@/components/tts-button";
 
 type MessageEntry = {
   role: "user" | "assistant";
@@ -142,8 +143,14 @@ export default function DocumentChatPage() {
           ) : (
             <div className="prose">
               <ReactMarkdown>{msg.content || " "}</ReactMarkdown>
-              {isStreaming && idx === messages.length - 1 && (
+              {isStreaming && idx === messages.length - 1 ? (
                 <span className="streaming-cursor" aria-hidden="true">▍</span>
+              ) : (
+                msg.content && (
+                  <div style={{ marginTop: "0.5rem" }}>
+                    <TTSButton text={msg.content} />
+                  </div>
+                )
               )}
             </div>
           )}

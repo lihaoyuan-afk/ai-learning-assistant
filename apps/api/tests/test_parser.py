@@ -53,3 +53,19 @@ def test_parse_corrupt_pdf_raises(tmp_path):
 def test_parse_title_is_filename(valid_pdf_path):
     result = parse_pdf(valid_pdf_path)
     assert result.title == valid_pdf_path.name
+
+
+def test_scanned_pdf_does_not_crash(tmp_path):
+    """A blank (image-only) page should not raise — OCR falls back gracefully."""
+    from app.services.document_parser import parse_pdf_bytes
+
+    # Build a PDF with a blank page (no selectable text → triggers OCR path)
+    doc = fitz.open()
+    doc.new_page()
+    contents = doc.tobytes()
+
+    # Should never raise regardless of whether pytesseract / Tesseract is installed
+    result = parse_pdf_bytes(title="scan.pdf", contents=contents)
+    assert len(result.pages) == 1
+    # Text may be empty (no Tesseract) or OCR'd — both are valid
+    assert isinstance(result.pages[0].text, str)

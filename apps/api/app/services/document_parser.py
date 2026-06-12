@@ -30,8 +30,33 @@ def parse_pdf(path: Path) -> ParsedDocument:
     return parse_pdf_bytes(title=path.name, contents=contents)
 
 
+_OCR_TEXT_THRESHOLD = 50  # pages with fewer chars are considered scanned
+
+
+def _ocr_page_image(page) -> str:
+    """Render a fitz page to image and OCR it. Returns '' if unavailable."""
+    try:
+        import io
+        import fitz  # noqa: F401 — already imported in caller
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        return ""
+    try:
+        mat = page.parent.identity_matrix * fitz.Matrix(2, 2)  # 2× scale for quality
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        # Try Chinese + English; gracefully fall back if language pack missing
+        try:
+            return pytesseract.image_to_string(img, lang="chi_sim+eng")
+        except Exception:
+            return pytesseract.image_to_string(img)
+    except Exception:
+        return ""
+
+
 def parse_pdf_bytes(title: str, contents: bytes) -> ParsedDocument:
-    """Parse a PDF from raw bytes — no disk access required."""
+    """Parse a PDF from raw bytes. Falls back to OCR for scanned pages."""
     try:
         import fitz
     except ImportError:
@@ -47,7 +72,13 @@ def parse_pdf_bytes(title: str, contents: bytes) -> ParsedDocument:
     pages: list[ParsedPage] = []
     with doc:
         for index, page in enumerate(doc, start=1):
-            pages.append(ParsedPage(page_number=index, text=page.get_text("text").strip()))
+            text = page.get_text("text").strip()
+            # If very little text extracted, the page is likely scanned — try OCR
+            if len(text) < _OCR_TEXT_THRESHOLD:
+                ocr_text = _ocr_page_image(page)
+                if ocr_text.strip():
+                    text = ocr_text.strip()
+            pages.append(ParsedPage(page_number=index, text=text))
 
     return ParsedDocument(title=title, pages=pages)
 

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { getDocument, streamSummary } from "@/lib/api";
+import { TTSButton } from "@/components/tts-button";
 
 export default function DocumentSummaryPage() {
   const params = useParams<{ id: string }>();
@@ -93,8 +94,12 @@ export default function DocumentSummaryPage() {
             <div className="prose">
               <ReactMarkdown>{summaryText}</ReactMarkdown>
             </div>
-            {isStreaming && (
+            {isStreaming ? (
               <span className="streaming-cursor" aria-hidden="true">▍</span>
+            ) : (
+              <div style={{ marginTop: "0.75rem" }}>
+                <TTSButton text={summaryText} />
+              </div>
             )}
           </>
         ) : (
