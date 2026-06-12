@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getErrorNotebook } from "@/lib/api";
+import { getErrorNotebook, scheduleReview } from "@/lib/api";
 import type { ErrorGroup, ErrorNotebookResponse } from "@/lib/types";
 
 export default function ErrorNotebookPage() {
@@ -10,6 +10,7 @@ export default function ErrorNotebookPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [scheduled, setScheduled] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getErrorNotebook()
@@ -24,6 +25,13 @@ export default function ErrorNotebookPage() {
       next.has(kp) ? next.delete(kp) : next.add(kp);
       return next;
     });
+  }
+
+  async function handleSchedule(kp: string) {
+    try {
+      await scheduleReview(kp);
+      setScheduled((prev) => new Set(prev).add(kp));
+    } catch { /* ignore */ }
   }
 
   const masteryColor = (score: number | null | undefined) => {
@@ -60,11 +68,11 @@ export default function ErrorNotebookPage() {
 
           {data.groups.map((group) => (
             <section key={group.knowledge_point} className="panel" style={{ marginBottom: "0.75rem" }}>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}
-                onClick={() => toggle(group.knowledge_point)}
-              >
-                <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <div
+                  style={{ flex: 1, cursor: "pointer" }}
+                  onClick={() => toggle(group.knowledge_point)}
+                >
                   <span style={{ fontWeight: 600 }}>{group.knowledge_point}</span>
                   <span style={{ marginLeft: "0.5rem", fontSize: "0.82rem", opacity: 0.6 }}>
                     {group.entries.length} 道题 · 共答错 {group.mistake_count} 次
@@ -82,7 +90,28 @@ export default function ErrorNotebookPage() {
                     掌握度 {group.mastery_score}
                   </span>
                 )}
-                <span style={{ opacity: 0.5, userSelect: "none" }}>
+                <button
+                  onClick={() => handleSchedule(group.knowledge_point)}
+                  disabled={scheduled.has(group.knowledge_point)}
+                  title="安排 3 天后出现在今日复习"
+                  style={{
+                    fontSize: "0.75rem",
+                    padding: "1px 7px",
+                    borderRadius: "4px",
+                    border: "1px solid var(--border, #e5e7eb)",
+                    background: scheduled.has(group.knowledge_point) ? "var(--bg-subtle,#f1f5f9)" : "#fff",
+                    cursor: scheduled.has(group.knowledge_point) ? "default" : "pointer",
+                    opacity: scheduled.has(group.knowledge_point) ? 0.6 : 1,
+                    whiteSpace: "nowrap",
+                  }}
+                  type="button"
+                >
+                  {scheduled.has(group.knowledge_point) ? "已安排 ✓" : "3天后复习"}
+                </button>
+                <span
+                  style={{ opacity: 0.5, userSelect: "none", cursor: "pointer" }}
+                  onClick={() => toggle(group.knowledge_point)}
+                >
                   {expanded.has(group.knowledge_point) ? "▲" : "▼"}
                 </span>
               </div>

@@ -13,6 +13,7 @@ import type {
   ReviewResponse,
   SummaryResponse,
   StudyPlan,
+  WeeklyReport,
 } from "@/lib/types";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -150,6 +151,18 @@ export async function importDocumentFromUrl(url: string): Promise<DocumentIngest
 
 export async function getErrorNotebook(): Promise<ErrorNotebookResponse> {
   return request<ErrorNotebookResponse>("/profile/error-notebook");
+}
+
+export async function scheduleReview(knowledge_point: string): Promise<void> {
+  await request<{ message: string }>("/profile/mastery/schedule-review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ knowledge_point }),
+  });
+}
+
+export async function getWeeklyReport(days = 7): Promise<WeeklyReport> {
+  return request<WeeklyReport>(`/profile/weekly-report?days=${days}`);
 }
 
 export async function getKnowledgeGraph(documentId: string): Promise<KnowledgeGraph> {

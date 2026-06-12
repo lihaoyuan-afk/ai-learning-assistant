@@ -99,6 +99,28 @@ def get_mastery() -> MasteryResponse:
     return MasteryResponse(items=items, total=total, average_score=avg)
 
 
+def schedule_review_soon(knowledge_point: str, days: int = 3) -> None:
+    """Schedule a knowledge point for review `days` from now (min existing score kept)."""
+    now = _utcnow()
+    target = now + timedelta(days=days)
+    with _db.db_session() as db:
+        mem = (
+            db.query(LearningMemory)
+            .filter(LearningMemory.knowledge_point == knowledge_point)
+            .first()
+        )
+        if mem is None:
+            mem = LearningMemory(
+                id=uuid4().hex,
+                knowledge_point=knowledge_point,
+                mastery_score=_INITIAL_SCORE,
+                correct_count=0,
+                mistake_count=0,
+            )
+            db.add(mem)
+        mem.next_review_at = target
+
+
 def get_review_today() -> ReviewResponse:
     from app.models.quiz import QuizQuestion as QuizQuestionModel  # avoid circular import
 

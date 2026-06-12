@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getMastery, generateStudyPlan } from "@/lib/api";
-import type { MasteryItem, MasteryResponse, StudyPlan } from "@/lib/types";
+import { getMastery, generateStudyPlan, getWeeklyReport } from "@/lib/api";
+import type { MasteryItem, MasteryResponse, StudyPlan, WeeklyReport } from "@/lib/types";
 
 function masteryColor(score: number): string {
   if (score >= 70) return "var(--color-success, #16a34a)";
@@ -59,6 +59,101 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
       <p style={{ fontSize: "0.85rem", fontWeight: 500, margin: 0 }}>{label}</p>
       {sub && <p style={{ fontSize: "0.75rem", opacity: 0.5, margin: "0.15rem 0 0" }}>{sub}</p>}
     </article>
+  );
+}
+
+function WeeklyReportPanel() {
+  const [report, setReport] = useState<WeeklyReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  async function load() {
+    setLoading(true); setError(null);
+    try { setReport(await getWeeklyReport(7)); }
+    catch (e) { setError(e instanceof Error ? e.message : "生成失败"); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <section style={{ marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+        <h2 style={{ fontSize: "0.9rem", opacity: 0.6, fontWeight: 600, margin: 0 }}>学习周报</h2>
+        <button
+          className="button"
+          style={{ fontSize: "0.8rem", padding: "0.25rem 0.65rem" }}
+          onClick={() => { if (!open) { setOpen(true); load(); } else setOpen(false); }}
+          type="button"
+        >
+          {open ? "收起" : "生成周报"}
+        </button>
+      </div>
+
+      {open && (
+        <>
+          {loading && <div className="empty" style={{ fontSize: "0.85rem" }}>正在生成报告…</div>}
+          {error && <div className="empty" style={{ color: "var(--color-danger, #c0392b)", fontSize: "0.85rem" }}>{error}</div>}
+
+          {report && !loading && (
+            <div>
+              {/* Stats row */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                {[
+                  { label: "新增资料", value: String(report.documents_added) },
+                  { label: "完成测验", value: String(report.quizzes_taken) },
+                  { label: "答题正确率", value: `${report.correct_rate}%` },
+                  { label: "平均掌握度", value: `${report.average_mastery}%` },
+                ].map((s) => (
+                  <article key={s.label} className="card" style={{ textAlign: "center", padding: "0.6rem 0.5rem" }}>
+                    <p style={{ fontSize: "1.2rem", fontWeight: 700, margin: "0 0 0.15rem" }}>{s.value}</p>
+                    <p style={{ fontSize: "0.72rem", opacity: 0.55, margin: 0 }}>{s.label}</p>
+                  </article>
+                ))}
+              </div>
+
+              {/* Weak/Strong */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                {report.weakest_points.length > 0 && (
+                  <article className="card" style={{ padding: "0.7rem 0.9rem" }}>
+                    <p style={{ fontSize: "0.75rem", opacity: 0.5, marginBottom: "0.4rem" }}>待加强</p>
+                    {report.weakest_points.map((kp) => (
+                      <p key={kp} style={{ fontSize: "0.82rem", margin: "0.15rem 0" }}>· {kp}</p>
+                    ))}
+                  </article>
+                )}
+                {report.strongest_points.length > 0 && (
+                  <article className="card" style={{ padding: "0.7rem 0.9rem" }}>
+                    <p style={{ fontSize: "0.75rem", opacity: 0.5, marginBottom: "0.4rem" }}>已掌握</p>
+                    {report.strongest_points.map((kp) => (
+                      <p key={kp} style={{ fontSize: "0.82rem", margin: "0.15rem 0" }}>· {kp}</p>
+                    ))}
+                  </article>
+                )}
+              </div>
+
+              {/* LLM recommendations */}
+              <article className="panel" style={{ fontSize: "0.88rem", lineHeight: 1.65 }}>
+                <p style={{ fontSize: "0.75rem", opacity: 0.5, marginBottom: "0.4rem" }}>AI 建议</p>
+                <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{report.recommendations}</p>
+              </article>
+
+              <p style={{ fontSize: "0.7rem", opacity: 0.4, textAlign: "right", marginTop: "0.4rem" }}>
+                过去 {report.period_days} 天 · 生成于 {new Date(report.generated_at).toLocaleString("zh-CN")}
+              </p>
+
+              <button
+                className="button secondary"
+                style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}
+                onClick={load}
+                type="button"
+              >
+                重新生成
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -175,6 +270,9 @@ export default function ProfilePage() {
           还没有答题记录。去完成一份 Quiz，掌握度将自动追踪。
         </div>
       )}
+
+      {/* Weekly report */}
+      {!isLoading && <WeeklyReportPanel />}
 
       {/* Study plan — always visible */}
       {!isLoading && (

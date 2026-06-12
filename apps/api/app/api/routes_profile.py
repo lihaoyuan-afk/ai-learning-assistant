@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Body, HTTPException
 
 from app.schemas.plan import StudyPlan
 from app.schemas.profile import (
@@ -8,7 +8,8 @@ from app.schemas.profile import (
     MasteryResponse,
     ReviewResponse,
 )
-from app.services.mastery_service import get_mastery, get_review_today
+from app.schemas.report import WeeklyReport
+from app.services.mastery_service import get_mastery, get_review_today, schedule_review_soon
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -60,3 +61,17 @@ def read_error_notebook() -> ErrorNotebookResponse:
         groups=groups,
         total_mistakes=sum(g.mistake_count for g in groups),
     )
+
+
+@router.post("/mastery/schedule-review")
+def schedule_review(knowledge_point: str = Body(..., embed=True)) -> dict:
+    schedule_review_soon(knowledge_point)
+    return {"message": "已安排", "knowledge_point": knowledge_point}
+
+
+@router.get("/weekly-report", response_model=WeeklyReport)
+def get_weekly_report(days: int = 7) -> WeeklyReport:
+    if days < 1 or days > 90:
+        raise HTTPException(status_code=400, detail="days 必须在 1-90 之间")
+    from app.services.report_service import generate_weekly_report
+    return generate_weekly_report(period_days=days)

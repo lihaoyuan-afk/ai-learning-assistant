@@ -181,3 +181,16 @@ export type KnowledgeGraph = {
   error?: string;
 };
 
+export type WeeklyReport = {
+  period_days: number;
+  documents_added: number;
+  quizzes_taken: number;
+  questions_answered: number;
+  correct_rate: number;
+  average_mastery: number;
+  weakest_points: string[];
+  strongest_points: string[];
+  recommendations: string;
+  generated_at: string;
+};
+
